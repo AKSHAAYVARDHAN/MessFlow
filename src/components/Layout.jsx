@@ -10,6 +10,7 @@ const studentLinks = [
     { to: '/student/lunch', label: 'Lunch Slots', icon: '🍽️', end: false },
     { to: '/student/dinner', label: 'Dinner Slots', icon: '🌙', end: false },
     { to: '/student/leave', label: 'Leave', icon: '🏖️', end: false },
+    { to: '/student/history', label: 'Meal History', icon: '📜', end: false },
     { to: '/student/profile', label: 'Profile', icon: '👤', end: false },
 ];
 
@@ -36,6 +37,7 @@ const PAGE_TITLES = {
     '/student/lunch': 'Lunch Slots',
     '/student/dinner': 'Dinner Slots',
     '/student/leave': 'Leave',
+    '/student/history': 'Meal History',
     '/student/profile': 'Profile',
     '/admin': 'Overview',
     '/admin/announcements': 'Announcements',

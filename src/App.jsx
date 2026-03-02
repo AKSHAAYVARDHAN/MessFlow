@@ -9,6 +9,7 @@ import LunchSlots from './pages/student/LunchSlots';
 import DinnerSlots from './pages/student/DinnerSlots';
 import LeaveForm from './pages/student/LeaveForm';
 import Profile from './pages/student/Profile';
+import MealHistory from './pages/student/MealHistory';
 import StudentAnnouncements from './pages/student/Announcements';
 import Overview from './pages/admin/Overview';
 import Announcements from './pages/admin/Announcements';
@@ -83,6 +84,7 @@ export default function App() {
               <Route path="lunch" element={<LunchSlots />} />
               <Route path="dinner" element={<DinnerSlots />} />
               <Route path="leave" element={<LeaveForm />} />
+              <Route path="history" element={<MealHistory />} />
               <Route path="profile" element={<Profile />} />
             </Route>
 
