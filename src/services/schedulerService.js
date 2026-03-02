@@ -1,6 +1,17 @@
 import { supabase } from './supabase';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import { generateQRData } from '../utils/qrHelpers';
+
+// Meal window end times (24-hour, local time)
+// After these hours the meal window is considered closed.
+const MEAL_END_HOURS = {
+    breakfast: 9,   // 9:00 AM
+    lunch: 14,      // 2:00 PM
+    dinner: 21,     // 9:00 PM
+};
+
+// Threshold for disabling auto-booking
+const NO_SHOW_DISABLE_THRESHOLD = 3;
 
 export const schedulerService = {
     /**
@@ -85,13 +96,22 @@ export const schedulerService = {
     },
 
     /**
-     * No-show marker: marks unscanned bookings as no_show
-     * and updates the user's no_show_count.
+     * No-show detection: scans today's unscanned bookings and marks
+     * those whose meal window has ended as no_show.
+     *
+     * Safety guarantees:
+     * - Only marks bookings still in 'booked' state (idempotent).
+     * - Skips meals where the window hasn't closed yet.
+     * - Skips students on approved leave for that meal.
+     * - Fetches fresh no_show_count before each increment (no race drift).
+     * - If no_show_count >= 3 → disables auto-booking.
+     * - Updates last_no_show_date for admin visibility.
      */
-    async runNoShowMarker() {
+    async runNoShowDetection() {
         const today = format(new Date(), 'yyyy-MM-dd');
+        const nowHour = new Date().getHours(); // local time hours (0-23)
 
-        // Find all bookings that are still 'booked' (not cancelled or scanned)
+        // Fetch all 'booked' bookings for today that haven't been scanned
         const { data: unscanned, error } = await supabase
             .from('bookings')
             .select('*')
@@ -101,47 +121,95 @@ export const schedulerService = {
         if (error) throw error;
 
         let marked = 0;
+        const skippedLeave = [];
 
         for (const booking of (unscanned || [])) {
-            // Mark as no_show
-            await supabase
+            const mealEndHour = MEAL_END_HOURS[booking.meal_type];
+
+            // Only process meals whose window has closed
+            if (nowHour < mealEndHour) continue;
+
+            // ── Leave check ──────────────────────────────────────────────
+            const { data: leaves } = await supabase
+                .from('leaves')
+                .select('*')
+                .eq('user_id', booking.user_id)
+                .lte('from_date', today)
+                .gte('to_date', today);
+
+            const mealOrder = { breakfast: 0, lunch: 1, dinner: 2 };
+            const mealIdx = mealOrder[booking.meal_type];
+
+            const isOnLeave = leaves?.some((leave) => {
+                const fromIdx = mealOrder[leave.from_meal];
+                const toIdx = mealOrder[leave.to_meal];
+
+                if (today === leave.from_date && today === leave.to_date) {
+                    return mealIdx >= fromIdx && mealIdx <= toIdx;
+                }
+                if (today === leave.from_date) return mealIdx >= fromIdx;
+                if (today === leave.to_date) return mealIdx <= toIdx;
+                return true;
+            });
+
+            if (isOnLeave) {
+                skippedLeave.push(booking.id);
+                continue;
+            }
+
+            // ── Mark booking as no_show ───────────────────────────────────
+            const { error: updateErr } = await supabase
                 .from('bookings')
                 .update({ status: 'no_show' })
-                .eq('id', booking.id);
+                .eq('id', booking.id)
+                .eq('status', 'booked'); // extra guard: only update if still 'booked'
 
-            // Increment no_show_count
-            const { data: user } = await supabase
-                .from('users')
-                .select('no_show_count, no_show_reset_date')
-                .eq('id', booking.user_id)
-                .single();
+            if (updateErr) {
+                console.warn('Failed to mark booking no_show:', updateErr);
+                continue;
+            }
 
-            if (user) {
-                const newCount = (user.no_show_count || 0) + 1;
-                const updates = { no_show_count: newCount };
+            // ── Atomically increment via Postgres RPC ────────────────────
+            // Using an RPC function (SECURITY DEFINER) instead of a direct
+            // client update ensures RLS cannot silently block the increment,
+            // and the count + last_no_show_date + disable logic all run
+            // atomically in a single DB round-trip.
+            const { error: rpcErr } = await supabase.rpc('increment_no_show', {
+                uid: booking.user_id,
+            });
 
-                // If 5 no-shows, disable default booking for 30 days
-                if (newCount >= 5) {
-                    const disableUntil = new Date();
-                    disableUntil.setDate(disableUntil.getDate() + 30);
-                    updates.default_booking_enabled = false;
-                    updates.default_disabled_until = disableUntil.toISOString();
-                }
-
-                await supabase
-                    .from('users')
-                    .update(updates)
-                    .eq('id', booking.user_id);
+            if (rpcErr) {
+                console.warn('increment_no_show RPC failed:', rpcErr.message);
+                continue;
             }
 
             marked++;
         }
 
-        return { marked };
+        return { marked, skippedLeave: skippedLeave.length };
+    },
+
+    /**
+     * Admin override: reset no_show_count to 0 and re-enable auto-booking.
+     */
+    async resetStudentNoShow(studentId) {
+        const { error } = await supabase
+            .from('users')
+            .update({
+                no_show_count: 0,
+                default_booking_enabled: true,
+                default_disabled_until: null,
+                last_no_show_date: null,
+            })
+            .eq('id', studentId);
+
+        if (error) throw error;
+        return { success: true };
     },
 
     /**
      * 30-day reset: resets no_show_count for users whose reset date has passed.
+     * Preserved from original implementation for scheduled runs.
      */
     async runResetCheck() {
         const now = new Date().toISOString();
@@ -167,6 +235,7 @@ export const schedulerService = {
                     no_show_reset_date: resetDate.toISOString(),
                     default_disabled_until: null,
                     default_booking_enabled: true,
+                    last_no_show_date: null,
                 })
                 .eq('id', user.id);
 
@@ -174,5 +243,13 @@ export const schedulerService = {
         }
 
         return { reset };
+    },
+
+    /**
+     * Legacy alias kept for backwards compatibility.
+     * @deprecated Use runNoShowDetection() instead.
+     */
+    async runNoShowMarker() {
+        return this.runNoShowDetection();
     },
 };

@@ -13,16 +13,14 @@ export default function Profile() {
         );
     }
 
-    const noShowLevel =
-        profile.no_show_count >= 5
-            ? 'danger'
-            : profile.no_show_count >= 3
-                ? 'warning'
-                : 'success';
+    const count = profile.no_show_count || 0;
+    const isDisabledByAdmin = !profile.default_booking_enabled;
 
-    const isDefaultDisabled =
-        profile.default_disabled_until &&
-        new Date(profile.default_disabled_until) > new Date();
+    // Color level based on count
+    const noShowLevel =
+        count >= 3 ? 'danger' :
+            count >= 2 ? 'warning' :
+                'success';
 
     return (
         <div className="space-y-6">
@@ -30,6 +28,36 @@ export default function Profile() {
                 <h2 className="text-xl font-bold text-text">Profile</h2>
                 <p className="text-sm text-text-secondary mt-0.5">Your account details and status</p>
             </div>
+
+            {/* Warning banner — shown if count >= 2 */}
+            {count >= 2 && (
+                <div
+                    className={`flex items-start gap-3 p-4 rounded-2xl border ${count >= 3
+                            ? 'bg-danger/8 border-danger/30'
+                            : 'bg-warning/10 border-warning/30'
+                        }`}
+                >
+                    <span className="text-2xl flex-shrink-0">{count >= 3 ? '🚫' : '⚠️'}</span>
+                    <div>
+                        {count >= 3 ? (
+                            <>
+                                <p className="text-sm font-bold text-danger">Auto-Booking Disabled</p>
+                                <p className="text-sm text-text-secondary mt-0.5">
+                                    You have <strong>{count} no-shows</strong>. Auto-booking has been disabled.
+                                    Contact admin to re-enable auto-booking.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm font-bold text-warning">No-Show Warning</p>
+                                <p className="text-sm text-text-secondary mt-0.5">
+                                    You have <strong>{count} no-shows</strong>. One more will automatically disable your auto-booking.
+                                </p>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Account Info */}
@@ -62,41 +90,54 @@ export default function Profile() {
                 {/* No-Show Status */}
                 <Card title="No-Show Status" icon="⚠️">
                     <div className="space-y-4">
-                        {/* No-show count */}
+                        {/* Count display */}
                         <div className="text-center p-6 rounded-xl bg-bg">
-                            <p className="text-4xl font-bold" style={{
-                                color: noShowLevel === 'danger' ? 'var(--color-danger)' :
-                                    noShowLevel === 'warning' ? 'var(--color-warning)' :
-                                        'var(--color-success)'
-                            }}>
-                                {profile.no_show_count}
+                            <p
+                                className="text-5xl font-bold"
+                                style={{
+                                    color:
+                                        noShowLevel === 'danger' ? 'var(--color-danger)' :
+                                            noShowLevel === 'warning' ? 'var(--color-warning)' :
+                                                'var(--color-success)',
+                                }}
+                            >
+                                {count}
                             </p>
-                            <p className="text-sm text-text-secondary mt-1">No-shows (last 30 days)</p>
+                            <p className="text-sm text-text-secondary mt-1">Total no-shows</p>
+                            <div className="flex justify-center gap-1 mt-2">
+                                {[0, 1, 2].map((i) => (
+                                    <div
+                                        key={i}
+                                        className="w-6 h-1.5 rounded-full transition-all"
+                                        style={{
+                                            background: i < count
+                                                ? count >= 3 ? 'var(--color-danger)' : 'var(--color-warning)'
+                                                : 'var(--color-border)',
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                            <p className="text-xs text-text-muted mt-1.5">{count}/3 before auto-booking is disabled</p>
                         </div>
 
-                        {/* Warning messages */}
-                        {profile.no_show_count >= 5 && (
-                            <div className="p-3 rounded-lg bg-danger/5 border border-danger/20">
-                                <p className="text-sm font-medium text-danger">
-                                    🚫 Default booking has been disabled for 30 days
+                        {/* Status messages */}
+                        {count >= 3 && (
+                            <div className="p-3 rounded-lg bg-danger/8 border border-danger/20">
+                                <p className="text-sm font-semibold text-danger">
+                                    🚫 You have {count} no-shows. Contact admin to re-enable auto-booking.
                                 </p>
-                                {isDefaultDisabled && (
-                                    <p className="text-xs text-text-secondary mt-1">
-                                        Re-enables on {new Date(profile.default_disabled_until).toLocaleDateString()}
-                                    </p>
-                                )}
                             </div>
                         )}
 
-                        {profile.no_show_count >= 3 && profile.no_show_count < 5 && (
+                        {count === 2 && (
                             <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
                                 <p className="text-sm font-medium text-warning">
-                                    ⚠️ Warning: {5 - profile.no_show_count} more no-shows will disable auto booking
+                                    ⚠️ Warning: One more no-show will disable auto-booking
                                 </p>
                             </div>
                         )}
 
-                        {profile.no_show_count < 3 && (
+                        {count < 2 && (
                             <div className="p-3 rounded-lg bg-success/5 border border-success/20">
                                 <p className="text-sm font-medium text-success">
                                     ✅ Your attendance record is good
@@ -104,7 +145,7 @@ export default function Profile() {
                             </div>
                         )}
 
-                        {/* Booking status */}
+                        {/* Auto-booking status row */}
                         <div className="flex items-center justify-between p-3 rounded-lg bg-bg">
                             <span className="text-sm text-text-secondary">Auto Booking</span>
                             <span className={`badge ${profile.default_booking_enabled ? 'badge-success' : 'badge-danger'}`}>
@@ -112,14 +153,14 @@ export default function Profile() {
                             </span>
                         </div>
 
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-bg">
-                            <span className="text-sm text-text-secondary">Reset Date</span>
-                            <span className="text-sm font-medium text-text">
-                                {profile.no_show_reset_date
-                                    ? new Date(profile.no_show_reset_date).toLocaleDateString()
-                                    : 'N/A'}
-                            </span>
-                        </div>
+                        {/* Contact admin note when disabled */}
+                        {isDisabledByAdmin && (
+                            <div className="p-3 rounded-lg bg-surface-hover border border-border text-center">
+                                <p className="text-xs text-text-secondary">
+                                    📧 Contact your mess admin to re-enable auto-booking
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </Card>
             </div>

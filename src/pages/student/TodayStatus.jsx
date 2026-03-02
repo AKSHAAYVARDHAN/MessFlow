@@ -200,26 +200,47 @@ export default function TodayStatus() {
                 </div>
 
                 {/* Auto Booking Toggle */}
-                <div className="card flex items-center gap-4 sm:w-auto"
+                <div className="card flex flex-col gap-3 sm:w-auto"
                     style={{ minWidth: '220px' }}>
-                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
-                        🔄
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
+                            🔄
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-text">Auto Booking</p>
+                            <p className="text-xs text-text-muted mt-0.5">
+                                {profile?.default_booking_enabled ? 'Active — meals booked automatically' : 'Off — book meals manually'}
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleToggleDefault}
+                            disabled={
+                                toggling ||
+                                !profile?.default_booking_enabled ||
+                                (profile?.default_disabled_until && new Date(profile.default_disabled_until) > new Date())
+                            }
+                            className={`toggle ${profile?.default_booking_enabled ? 'active' : ''}`}
+                            title={!profile?.default_booking_enabled ? 'Disabled by admin due to no-shows' : ''}
+                        />
                     </div>
-                    <div className="flex-1">
-                        <p className="text-sm font-semibold text-text">Auto Booking</p>
-                        <p className="text-xs text-text-muted mt-0.5">
-                            {profile?.default_booking_enabled ? 'Active — meals booked automatically' : 'Off — book meals manually'}
-                        </p>
-                        {profile?.default_disabled_until && new Date(profile.default_disabled_until) > new Date() && (
-                            <span className="badge badge-danger text-xs mt-1">Disabled</span>
-                        )}
-                    </div>
-                    <button
-                        onClick={handleToggleDefault}
-                        disabled={toggling || (profile?.default_disabled_until && new Date(profile.default_disabled_until) > new Date())}
-                        className={`toggle ${profile?.default_booking_enabled ? 'active' : ''}`}
-                        title={profile?.default_disabled_until ? 'Disabled due to no-shows' : ''}
-                    />
+                    {/* No-show warning inside the card */}
+                    {profile && !profile.default_booking_enabled && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-danger/8 border border-danger/20">
+                            <span className="text-base flex-shrink-0">⚠️</span>
+                            <p className="text-xs font-medium text-danger leading-snug">
+                                Auto-booking disabled due to {profile.no_show_count || 3}+ no-shows.
+                                Contact admin to re-enable.
+                            </p>
+                        </div>
+                    )}
+                    {profile && profile.default_booking_enabled && (profile.no_show_count || 0) >= 2 && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-warning/10 border border-warning/20">
+                            <span className="text-base flex-shrink-0">⚠️</span>
+                            <p className="text-xs font-medium text-warning leading-snug">
+                                {profile.no_show_count} no-show{profile.no_show_count !== 1 ? 's' : ''}. One more disables auto-booking.
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
 
