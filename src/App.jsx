@@ -16,7 +16,9 @@ import MenuManagement from './pages/admin/MenuManagement';
 import NoShowMonitor from './pages/admin/NoShowMonitor';
 import SlotMonitor from './pages/admin/SlotMonitor';
 import LeaveMonitor from './pages/admin/LeaveMonitor';
+import ScanLogs from './pages/admin/ScanLogs';
 import GuestBooking from './pages/GuestBooking';
+import ScanPage from './pages/ScanPage';
 
 /**
  * RootRedirect — auto-redirects authenticated users to their role dashboard.
@@ -38,6 +40,7 @@ function RootRedirect() {
 
   if (!profile) return <Navigate to="/login" replace />;
   if (profile.role === 'admin') return <Navigate to="/admin" replace />;
+  if (profile.role === 'staff') return <Navigate to="/scan" replace />;
   return <Navigate to="/student" replace />;
 }
 
@@ -53,6 +56,16 @@ export default function App() {
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/guest" element={<GuestBooking />} />
+
+            {/* QR Scanner — accessible by admin and staff */}
+            <Route
+              path="/scan"
+              element={
+                <ProtectedRoute role={['admin', 'staff']}>
+                  <ScanPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Student routes — /student/* */}
             <Route
@@ -86,6 +99,7 @@ export default function App() {
               <Route path="no-shows" element={<NoShowMonitor />} />
               <Route path="slots" element={<SlotMonitor />} />
               <Route path="leaves" element={<LeaveMonitor />} />
+              <Route path="scan-logs" element={<ScanLogs />} />
             </Route>
 
             {/* Catch all — redirect to root which handles role-based routing */}

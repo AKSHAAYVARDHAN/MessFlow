@@ -20,6 +20,11 @@ const adminLinks = [
     { to: '/admin/slots', label: 'Slot Monitor', icon: '📈', end: false },
     { to: '/admin/leaves', label: 'Leave Monitor', icon: '🏖️', end: false },
     { to: '/admin/no-shows', label: 'No-Show Monitor', icon: '⚠️', end: false },
+    { to: '/admin/scan-logs', label: 'Scan Logs', icon: '📷', end: false },
+];
+
+const staffLinks = [
+    { to: '/scan', label: 'QR Scanner', icon: '📷', end: true },
 ];
 
 // Map route paths to page titles
@@ -36,6 +41,8 @@ const PAGE_TITLES = {
     '/admin/slots': 'Slot Monitor',
     '/admin/leaves': 'Leave Monitor',
     '/admin/no-shows': 'No-Show Monitor',
+    '/admin/scan-logs': 'Scan Logs',
+    '/scan': 'QR Scanner',
     '/guest': 'Guest Booking',
 };
 
@@ -46,8 +53,12 @@ export default function Layout() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [annBadge, setAnnBadge] = useState(0);
 
-    const links = profile?.role === 'admin' ? adminLinks : studentLinks;
-    const roleBadgeClass = profile?.role === 'admin' ? 'badge-admin' : 'badge-student';
+    const links = profile?.role === 'admin' ? adminLinks
+        : profile?.role === 'staff' ? staffLinks
+            : studentLinks;
+    const roleBadgeClass = profile?.role === 'admin' ? 'badge-admin'
+        : profile?.role === 'staff' ? 'badge-admin'
+            : 'badge-student';
 
     // Derive page title from current path
     const pageTitle = PAGE_TITLES[location.pathname] || 'MessFlow';

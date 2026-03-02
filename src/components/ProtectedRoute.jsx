@@ -5,8 +5,9 @@ import { useAuth } from '../contexts/AuthContext';
  * ProtectedRoute — guards routes by authentication and role.
  *
  * Usage:
- *   <ProtectedRoute role="admin">   — only admins
- *   <ProtectedRoute role="student"> — only students
+ *   <ProtectedRoute role="admin">              — only admins
+ *   <ProtectedRoute role="student">            — only students
+ *   <ProtectedRoute role={['admin','staff']}>  — admin or staff
  *
  * Behavior:
  *   - Not authenticated → redirect to /login
@@ -32,9 +33,17 @@ export default function ProtectedRoute({ children, role, requiredRole }) {
         return <Navigate to="/login" replace />;
     }
 
-    if (expectedRole && profile?.role !== expectedRole) {
-        const redirect = profile?.role === 'admin' ? '/admin' : '/student';
-        return <Navigate to={redirect} replace />;
+    // Check role — supports string or array of allowed roles
+    if (expectedRole) {
+        const allowedRoles = Array.isArray(expectedRole) ? expectedRole : [expectedRole];
+        const userRole = profile?.role;
+
+        if (!allowedRoles.includes(userRole)) {
+            // Redirect to appropriate dashboard based on actual role
+            if (userRole === 'admin') return <Navigate to="/admin" replace />;
+            if (userRole === 'staff') return <Navigate to="/scan" replace />;
+            return <Navigate to="/student" replace />;
+        }
     }
 
     return children;

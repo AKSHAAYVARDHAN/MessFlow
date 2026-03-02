@@ -104,6 +104,7 @@ export function AuthProvider({ children }) {
         refreshProfile,
         isStudent: profile?.role === 'student',
         isAdmin: profile?.role === 'admin',
+        isStaff: profile?.role === 'staff',
         isConfigured: isSupabaseConfigured,
     };
 
