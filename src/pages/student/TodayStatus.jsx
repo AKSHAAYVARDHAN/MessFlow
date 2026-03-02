@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Card from '../../components/Card';
 import QRDisplay from '../../components/QRDisplay';
 import Modal from '../../components/Modal';
+import FeedbackModal from '../../components/FeedbackModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBookings } from '../../hooks/useBookings';
 import { useRealtimeBookings } from '../../hooks/useRealtime';
@@ -10,6 +11,7 @@ import { bookingService } from '../../services/bookingService';
 import { leaveService } from '../../services/leaveService';
 import { announcementService } from '../../services/announcementService';
 import { menuService } from '../../services/menuService';
+import { feedbackService } from '../../services/feedbackService';
 import { supabase } from '../../services/supabase';
 import { MEAL_ICONS, CANCELLATION_DEADLINES } from '../../utils/constants';
 import { getToday, canCancelMeal, getTimeRemaining, getCancellationDeadlineLabel, formatDate } from '../../utils/dateHelpers';
@@ -73,6 +75,11 @@ export default function TodayStatus() {
     const [cancelModal, setCancelModal] = useState(null);
     const [cancellingMeal, setCancellingMeal] = useState(null);
 
+    // Feedback
+    const [feedbackModal, setFeedbackModal] = useState(null); // { bookingId, mealType }
+    const [feedbackMap, setFeedbackMap] = useState({});       // bookingId -> feedback record
+    const [submittingFeedback, setSubmittingFeedback] = useState(false);
+
     const today = getToday();
 
     useRealtimeBookings(today, () => refetch());
@@ -96,6 +103,21 @@ export default function TodayStatus() {
         }
         checkLeave();
     }, [user.id]);
+
+    // Load existing feedback whenever today's bookings change
+    useEffect(() => {
+        const attendedIds = bookings
+            .filter(b => b.status === 'scanned')
+            .map(b => b.id);
+        if (attendedIds.length === 0) { setFeedbackMap({}); return; }
+        feedbackService.getFeedbackForBookingIds(attendedIds)
+            .then(records => {
+                const map = {};
+                records.forEach(r => { map[r.booking_id] = r; });
+                setFeedbackMap(map);
+            })
+            .catch(console.error);
+    }, [bookings]);
 
     function isMealOnLeave(mealType) {
         if (!activeLeave) return false;
@@ -146,6 +168,25 @@ export default function TodayStatus() {
             toast.error('Cancellation failed', err.message || 'Please try again.');
         } finally {
             setCancellingMeal(null);
+        }
+    }
+
+    async function handleSubmitFeedback(rating, comment) {
+        if (!feedbackModal || submittingFeedback) return;
+        const { bookingId, mealType } = feedbackModal;
+        setSubmittingFeedback(true);
+        try {
+            const record = await feedbackService.submitFeedback(
+                user.id, bookingId, mealType, rating, comment
+            );
+            // Update local map so the button turns into "Thank you"
+            setFeedbackMap(prev => ({ ...prev, [bookingId]: record }));
+            toast.success('Feedback submitted!', 'Thank you for rating your meal.');
+        } catch (err) {
+            toast.error('Submission failed', err.message || 'Please try again.');
+            throw err; // Let modal know to stay open
+        } finally {
+            setSubmittingFeedback(false);
         }
     }
 
@@ -350,10 +391,31 @@ export default function TodayStatus() {
                                                 )}
                                             </div>
                                         ) : booking?.status === 'scanned' ? (
-                                            <div className="flex flex-col items-center justify-center py-8 space-y-2">
+                                            <div className="flex flex-col items-center justify-center py-6 space-y-3">
                                                 <div className="w-16 h-16 rounded-2xl bg-green-50 flex items-center justify-center text-3xl mb-1">✅</div>
                                                 <p className="text-sm font-semibold text-success">Meal Scanned</p>
                                                 <p className="text-xs text-text-muted">Enjoy your {meal}!</p>
+                                                {/* Feedback CTA */}
+                                                {feedbackMap[booking.id] ? (
+                                                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200">
+                                                        <span className="text-sm">⭐</span>
+                                                        <span className="text-xs font-semibold text-amber-700">{'★'.repeat(feedbackMap[booking.id].rating)} rated</span>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => setFeedbackModal({ bookingId: booking.id, mealType: meal })}
+                                                        className="btn btn-sm"
+                                                        style={{
+                                                            background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)',
+                                                            border: '1.5px solid #FED7AA',
+                                                            color: '#C2410C',
+                                                            fontWeight: 600,
+                                                        }}
+                                                    >
+                                                        <span>⭐</span>
+                                                        Rate This Meal
+                                                    </button>
+                                                )}
                                             </div>
                                         ) : booking?.status === 'no_show' ? (
                                             <div className="flex flex-col items-center justify-center py-8 space-y-2">
@@ -519,6 +581,15 @@ export default function TodayStatus() {
                     </div>
                 </div>
             </Modal>
+
+            {/* ── Feedback Modal ── */}
+            <FeedbackModal
+                isOpen={!!feedbackModal}
+                mealType={feedbackModal?.mealType}
+                onClose={() => !submittingFeedback && setFeedbackModal(null)}
+                onSubmit={handleSubmitFeedback}
+                submitting={submittingFeedback}
+            />
         </div>
     );
 }

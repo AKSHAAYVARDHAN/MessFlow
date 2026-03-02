@@ -22,6 +22,7 @@ const adminLinks = [
     { to: '/admin/no-shows', label: 'No-Show Monitor', icon: '⚠️', end: false },
     { to: '/admin/scan-logs', label: 'Scan Logs', icon: '📷', end: false },
     { to: '/admin/analytics', label: 'Analytics', icon: '📉', end: false },
+    { to: '/admin/feedback', label: 'Meal Feedback', icon: '⭐', end: false },
 ];
 
 const staffLinks = [
@@ -44,6 +45,7 @@ const PAGE_TITLES = {
     '/admin/no-shows': 'No-Show Monitor',
     '/admin/scan-logs': 'Scan Logs',
     '/admin/analytics': 'Analytics Overview',
+    '/admin/feedback': 'Meal Feedback',
     '/scan': 'QR Scanner',
     '/guest': 'Guest Booking',
 };

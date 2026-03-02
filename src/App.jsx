@@ -18,6 +18,7 @@ import SlotMonitor from './pages/admin/SlotMonitor';
 import LeaveMonitor from './pages/admin/LeaveMonitor';
 import ScanLogs from './pages/admin/ScanLogs';
 import Analytics from './pages/admin/Analytics';
+import MealFeedback from './pages/admin/MealFeedback';
 import GuestBooking from './pages/GuestBooking';
 import ScanPage from './pages/ScanPage';
 
@@ -102,6 +103,7 @@ export default function App() {
               <Route path="leaves" element={<LeaveMonitor />} />
               <Route path="scan-logs" element={<ScanLogs />} />
               <Route path="analytics" element={<Analytics />} />
+              <Route path="feedback" element={<MealFeedback />} />
             </Route>
 
             {/* Catch all — redirect to root which handles role-based routing */}
