@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format, parseISO, isAfter } from 'date-fns';
 import Card from '../../components/Card';
 import FeedbackModal from '../../components/FeedbackModal';
@@ -11,7 +11,7 @@ import { MEAL_ICONS } from '../../utils/constants';
 /* ────────────────────────────────────────────────────────────────────────────
    Constants & helpers
 ─────────────────────────────────────────────────────────────────────────────*/
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 const MEAL_ORDER = { breakfast: 0, lunch: 1, dinner: 2 };
 
 const MEAL_WINDOW_END = {
@@ -69,42 +69,105 @@ function deriveStatus(booking, leaves) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Status Badge component
+   Status Badge component — redesigned with stronger colors and contrast
 ─────────────────────────────────────────────────────────────────────────────*/
-const STATUS_BADGE_CONFIG = {
-    attended: { label: 'Attended', cls: 'badge-success' },
-    missed: { label: 'Missed', cls: 'badge-danger' },
-    cancelled: { label: 'Cancelled', cls: 'badge-muted' },
-    on_leave: { label: 'On Leave', cls: 'badge-info' },
-    booked: { label: 'Upcoming', cls: 'badge-warning' },
-    no_show: { label: 'No Show', cls: 'badge-danger' },
+const STATUS_CONFIG = {
+    attended: {
+        label: 'Attended', icon: '✅',
+        bg: '#DCFCE7', color: '#15803D', border: '#86EFAC',
+    },
+    missed: {
+        label: 'Missed', icon: '🚫',
+        bg: '#FEE2E2', color: '#B91C1C', border: '#FECACA',
+    },
+    cancelled: {
+        label: 'Cancelled', icon: '❌',
+        bg: '#F1F5F9', color: '#475569', border: '#CBD5E1',
+    },
+    on_leave: {
+        label: 'On Leave', icon: '🏖️',
+        bg: '#DBEAFE', color: '#1E40AF', border: '#93C5FD',
+    },
+    booked: {
+        label: 'Upcoming', icon: '🔵',
+        bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE',
+    },
+    no_show: {
+        label: 'No Show', icon: '⚠️',
+        bg: '#FEF3C7', color: '#92400E', border: '#FCD34D',
+    },
 };
 
 function StatusBadge({ status }) {
-    const cfg = STATUS_BADGE_CONFIG[status] || { label: status, cls: 'badge-muted' };
-    return <span className={`badge ${cfg.cls}`}>{cfg.label}</span>;
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Star display (read-only)
-─────────────────────────────────────────────────────────────────────────────*/
-function StarDisplay({ rating }) {
+    const cfg = STATUS_CONFIG[status] || { label: status, icon: '•', bg: '#F1F5F9', color: '#64748B', border: '#E2E8F0' };
     return (
-        <span className="text-amber-400 tracking-tight text-sm" title={`${rating}/5`}>
-            {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
+        <span
+            style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 10px',
+                borderRadius: 9999,
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                background: cfg.bg,
+                color: cfg.color,
+                border: `1.5px solid ${cfg.border}`,
+                letterSpacing: '0.01em',
+                whiteSpace: 'nowrap',
+            }}
+        >
+            <span style={{ fontSize: '0.7rem' }}>{cfg.icon}</span>
+            {cfg.label}
         </span>
     );
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Skeleton row
+   Summary stat card
+─────────────────────────────────────────────────────────────────────────────*/
+function SummaryStat({ icon, label, value, color, bg, border }) {
+    return (
+        <div
+            style={{
+                background: bg,
+                border: `1.5px solid ${border}`,
+                borderRadius: 14,
+                padding: '14px 18px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                flex: '1 1 120px',
+            }}
+        >
+            <div
+                style={{
+                    width: 40, height: 40, borderRadius: 10,
+                    background: 'rgba(255,255,255,0.7)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.25rem', flexShrink: 0,
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                }}
+            >
+                {icon}
+            </div>
+            <div>
+                <p style={{ fontSize: '1.5rem', fontWeight: 900, color, lineHeight: 1, letterSpacing: '-0.03em' }}>{value}</p>
+                <p style={{ fontSize: '0.72rem', color, opacity: 0.75, marginTop: 2, fontWeight: 600 }}>{label}</p>
+            </div>
+        </div>
+    );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Skeleton rows
 ─────────────────────────────────────────────────────────────────────────────*/
 function SkeletonRow() {
     return (
         <tr>
-            {[1, 2, 3, 4, 5, 6].map(i => (
-                <td key={i} className="px-4 py-3">
-                    <div className="skeleton h-4 rounded" style={{ width: i === 1 ? 90 : i === 5 ? 60 : 70 }} />
+            {[100, 130, 90, 75, 110, 60].map((w, i) => (
+                <td key={i} style={{ padding: '14px 16px' }}>
+                    <div className="skeleton rounded" style={{ height: 14, width: w }} />
                 </td>
             ))}
         </tr>
@@ -112,74 +175,97 @@ function SkeletonRow() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Filter Bar
+   Filter Bar — redesigned compact
 ─────────────────────────────────────────────────────────────────────────────*/
-function FilterBar({ filters, onChange }) {
-    const { dateFrom, dateTo, mealType, status } = filters;
+function FilterBar({ filters, onApply }) {
+    const [local, setLocal] = useState(filters);
+
+    // Sync when parent resets
+    useEffect(() => setLocal(filters), [filters]);
+
+    const defaultFilters = { dateFrom: '', dateTo: '', mealType: 'all', status: 'all' };
 
     return (
-        <div className="flex flex-wrap gap-3 items-end" style={{ marginBottom: '1.5rem' }}>
-            {/* Date From */}
-            <div>
-                <label className="label">From</label>
-                <input
-                    type="date"
-                    className="input"
-                    style={{ width: 150 }}
-                    value={dateFrom}
-                    onChange={e => onChange({ ...filters, dateFrom: e.target.value })}
-                />
+        <div
+            style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 14,
+                padding: '16px 20px',
+                marginBottom: 20,
+            }}
+        >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+                {/* Date From */}
+                <div style={{ flex: '1 1 130px' }}>
+                    <label className="label" style={{ marginBottom: 4 }}>From</label>
+                    <input
+                        type="date"
+                        className="input"
+                        value={local.dateFrom}
+                        onChange={e => setLocal(l => ({ ...l, dateFrom: e.target.value }))}
+                    />
+                </div>
+
+                {/* Date To */}
+                <div style={{ flex: '1 1 130px' }}>
+                    <label className="label" style={{ marginBottom: 4 }}>To</label>
+                    <input
+                        type="date"
+                        className="input"
+                        value={local.dateTo}
+                        onChange={e => setLocal(l => ({ ...l, dateTo: e.target.value }))}
+                    />
+                </div>
+
+                {/* Meal Type */}
+                <div style={{ flex: '1 1 130px' }}>
+                    <label className="label" style={{ marginBottom: 4 }}>Meal Type</label>
+                    <select
+                        className="input"
+                        value={local.mealType}
+                        onChange={e => setLocal(l => ({ ...l, mealType: e.target.value }))}
+                    >
+                        <option value="all">All Meals</option>
+                        <option value="breakfast">Breakfast</option>
+                        <option value="lunch">Lunch</option>
+                        <option value="dinner">Dinner</option>
+                    </select>
+                </div>
+
+                {/* Status */}
+                <div style={{ flex: '1 1 130px' }}>
+                    <label className="label" style={{ marginBottom: 4 }}>Status</label>
+                    <select
+                        className="input"
+                        value={local.status}
+                        onChange={e => setLocal(l => ({ ...l, status: e.target.value }))}
+                    >
+                        <option value="all">All Statuses</option>
+                        <option value="attended">Attended</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="missed">Missed</option>
+                        <option value="no_show">No Show</option>
+                        <option value="on_leave">On Leave</option>
+                    </select>
+                </div>
+
+                {/* Buttons */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', paddingBottom: 0 }}>
+                    <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => onApply(local)}
+                    >
+                        Apply
+                    </button>
+                    <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { setLocal(defaultFilters); onApply(defaultFilters); }}
+                    >
+                        Reset
+                    </button>
+                </div>
             </div>
-            {/* Date To */}
-            <div>
-                <label className="label">To</label>
-                <input
-                    type="date"
-                    className="input"
-                    style={{ width: 150 }}
-                    value={dateTo}
-                    onChange={e => onChange({ ...filters, dateTo: e.target.value })}
-                />
-            </div>
-            {/* Meal Type */}
-            <div>
-                <label className="label">Meal Type</label>
-                <select
-                    className="input"
-                    style={{ width: 150 }}
-                    value={mealType}
-                    onChange={e => onChange({ ...filters, mealType: e.target.value })}
-                >
-                    <option value="all">All Meals</option>
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                </select>
-            </div>
-            {/* Status */}
-            <div>
-                <label className="label">Status</label>
-                <select
-                    className="input"
-                    style={{ width: 150 }}
-                    value={status}
-                    onChange={e => onChange({ ...filters, status: e.target.value })}
-                >
-                    <option value="all">All Statuses</option>
-                    <option value="attended">Attended</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="missed">Missed</option>
-                    <option value="no_show">No Show</option>
-                    <option value="on_leave">On Leave</option>
-                </select>
-            </div>
-            {/* Reset */}
-            <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => onChange({ dateFrom: '', dateTo: '', mealType: 'all', status: 'all' })}
-            >
-                Reset
-            </button>
         </div>
     );
 }
@@ -192,22 +278,17 @@ function Pagination({ page, total, onPage }) {
     if (totalPages <= 1) return null;
 
     return (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-            <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => onPage(page - 1)}
-                disabled={page <= 1}
-            >
+        <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)',
+        }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => onPage(page - 1)} disabled={page <= 1}>
                 ← Previous
             </button>
-            <span className="text-sm text-text-muted font-medium">
+            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                 Page {page} of {totalPages}
             </span>
-            <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => onPage(page + 1)}
-                disabled={page >= totalPages}
-            >
+            <button className="btn btn-ghost btn-sm" onClick={() => onPage(page + 1)} disabled={page >= totalPages}>
                 Next →
             </button>
         </div>
@@ -215,29 +296,67 @@ function Pagination({ page, total, onPage }) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Tooltip wrapper for feedback comment
+   Feedback cell sub-component
 ─────────────────────────────────────────────────────────────────────────────*/
-function CommentTooltip({ comment, children }) {
-    const [show, setShow] = useState(false);
-    if (!comment) return children;
-    return (
-        <span
-            className="relative"
-            onMouseEnter={() => setShow(true)}
-            onMouseLeave={() => setShow(false)}
-        >
-            {children}
-            {show && (
-                <span
-                    className="absolute z-50 bottom-7 left-1/2 -translate-x-1/2 bg-text text-white text-xs rounded-lg px-3 py-2 shadow-xl"
-                    style={{ minWidth: 180, maxWidth: 260, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
-                >
-                    {comment}
-                    <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-text" />
+function FeedbackCell({ feedback, derivedStatus, onRate }) {
+    const [showComment, setShowComment] = useState(false);
+
+    if (feedback) {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {/* Stars */}
+                <span style={{ color: '#F59E0B', fontSize: '0.875rem', letterSpacing: 1 }} title={`${feedback.rating}/5`}>
+                    {'★'.repeat(feedback.rating)}{'☆'.repeat(5 - feedback.rating)}
                 </span>
-            )}
-        </span>
-    );
+                {feedback.comment && (
+                    <button
+                        onClick={() => setShowComment(s => !s)}
+                        style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontSize: '0.72rem', color: 'var(--color-primary)', fontWeight: 600,
+                            padding: 0, textAlign: 'left',
+                        }}
+                    >
+                        {showComment ? 'Hide ▲' : '💬 View Comment'}
+                    </button>
+                )}
+                {showComment && feedback.comment && (
+                    <span
+                        style={{
+                            display: 'block', fontSize: '0.75rem',
+                            color: 'var(--color-text-secondary)',
+                            background: 'var(--color-bg)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 8, padding: '6px 10px',
+                            maxWidth: 200, lineHeight: 1.5,
+                        }}
+                    >
+                        {feedback.comment}
+                    </span>
+                )}
+            </div>
+        );
+    }
+
+    if (derivedStatus === 'attended') {
+        return (
+            <button
+                onClick={onRate}
+                style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '5px 10px', borderRadius: 8,
+                    background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)',
+                    border: '1.5px solid #FED7AA',
+                    color: '#C2410C', fontSize: '0.75rem', fontWeight: 700,
+                    cursor: 'pointer',
+                }}
+            >
+                ⭐ Add Feedback
+            </button>
+        );
+    }
+
+    return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>—</span>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -248,17 +367,16 @@ export default function MealHistory() {
     const toast = useToast();
 
     /* ─── State ─── */
-    const [rows, setRows] = useState([]);   // processed rows with derived status
+    const [rows, setRows] = useState([]);
+    const [allRowsForStats, setAllRowsForStats] = useState([]); // unfiltered page rows for summary
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
-    const [filters, setFilters] = useState({ dateFrom: '', dateTo: '', mealType: 'all', status: 'all' });
+    const [appliedFilters, setAppliedFilters] = useState({ dateFrom: '', dateTo: '', mealType: 'all', status: 'all' });
     const [leaves, setLeaves] = useState([]);
 
-    // Feedback modal state
-    const [feedbackModal, setFeedbackModal] = useState(null); // { bookingId, mealType }
+    const [feedbackModal, setFeedbackModal] = useState(null);
     const [submitting, setSubmitting] = useState(false);
-    // Local map: bookingId → feedback record (for optimistic update)
     const [feedbackMap, setFeedbackMap] = useState({});
 
     /* ─── Fetch data ─── */
@@ -266,7 +384,6 @@ export default function MealHistory() {
         if (!user?.id) return;
         setLoading(true);
         try {
-            // Determine date range for leave lookup
             const dateFrom = fl.dateFrom || '2000-01-01';
             const dateTo = fl.dateTo || '2100-01-01';
 
@@ -278,25 +395,26 @@ export default function MealHistory() {
             setLeaves(leaveData);
             setTotal(histResult.count);
 
-            // Build feedback map from embedded join data
+            // Build feedback map
             const fMap = {};
             histResult.data.forEach(row => {
-                const fb = row.meal_feedback?.[0]; // Supabase returns array for 1:many
+                const fb = row.meal_feedback?.[0];
                 if (fb) fMap[row.id] = fb;
             });
             setFeedbackMap(prev => ({ ...prev, ...fMap }));
 
-            // Process rows — attach derived status
+            // Process rows
             const processed = histResult.data.map(row => ({
                 ...row,
                 derivedStatus: deriveStatus(row, leaveData),
             }));
 
-            // Client-side status filter for missed / on_leave
+            // Client-side status filter
             let final = processed;
             if (fl.status === 'missed') final = processed.filter(r => r.derivedStatus === 'missed');
             if (fl.status === 'on_leave') final = processed.filter(r => r.derivedStatus === 'on_leave');
 
+            setAllRowsForStats(processed);
             setRows(final);
         } catch (err) {
             toast.error('Failed to load history', err.message || 'Please try again.');
@@ -306,14 +424,25 @@ export default function MealHistory() {
     }, [user?.id]);
 
     useEffect(() => {
-        fetchHistory(page, filters);
-    }, [page, filters, fetchHistory]);
+        fetchHistory(page, appliedFilters);
+    }, [page, appliedFilters, fetchHistory]);
 
-    /* ─── Filter change ─── */
-    function handleFilterChange(newFilters) {
-        setFilters(newFilters);
-        setPage(1); // reset to first page
+    function handleFilterApply(newFilters) {
+        setAppliedFilters(newFilters);
+        setPage(1);
     }
+
+    /* ─── Summary stats (from all rows in current page/filter) ─── */
+    const summary = useMemo(() => {
+        const src = allRowsForStats;
+        const attended = src.filter(r => r.derivedStatus === 'attended').length;
+        const missed = src.filter(r => r.derivedStatus === 'missed').length;
+        const cancelled = src.filter(r => r.derivedStatus === 'cancelled').length;
+        const onLeave = src.filter(r => r.derivedStatus === 'on_leave').length;
+        const total = attended + missed;
+        const pct = total > 0 ? Math.round((attended / total) * 100) : null;
+        return { attended, missed, cancelled, onLeave, pct, total: src.length };
+    }, [allRowsForStats]);
 
     /* ─── Feedback submit ─── */
     async function handleSubmitFeedback(rating, comment) {
@@ -332,38 +461,114 @@ export default function MealHistory() {
         }
     }
 
+    /* ─── Group rows by date ─── */
+    const groupedByDate = useMemo(() => {
+        const groups = {};
+        rows.forEach(row => {
+            if (!groups[row.date]) groups[row.date] = [];
+            groups[row.date].push(row);
+        });
+        // Return sorted dates descending
+        return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
+    }, [rows]);
+
+    /* ─── Format helpers ─── */
+    function formatDate(dateStr) {
+        try { return format(parseISO(dateStr), 'dd MMM yyyy'); }
+        catch { return dateStr; }
+    }
+
+    function formatDayOfWeek(dateStr) {
+        try { return format(parseISO(dateStr), 'EEEE'); }
+        catch { return ''; }
+    }
+
+    function formatSlot(slotTime, mealType) {
+        if (!slotTime) {
+            if (mealType === 'breakfast') return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>Auto-assigned</span>;
+            return <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>No slot selected</span>;
+        }
+        return <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>{slotTime.slice(0, 5)}</span>;
+    }
+
     /* ─── Render ─── */
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }} className="animate-fade-in">
+
             {/* Page Header */}
-            <div className="page-header">
+            <div className="page-header" style={{ marginBottom: 0 }}>
                 <h1 className="page-title">My Meal History</h1>
                 <p className="page-subtitle">View your past bookings, attendance status, and feedback</p>
             </div>
 
-            {/* Main Card */}
-            <Card noPad>
-                <div className="px-6 pt-5">
-                    {/* Filter Bar */}
-                    <FilterBar filters={filters} onChange={handleFilterChange} />
+            {/* ── Summary Stats Header ── */}
+            {!loading && allRowsForStats.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }} className="animate-fade-in">
+                    <SummaryStat
+                        icon="📋"
+                        label="Total Meals"
+                        value={summary.total}
+                        color="#1E40AF"
+                        bg="#EFF6FF"
+                        border="#BFDBFE"
+                    />
+                    <SummaryStat
+                        icon="✅"
+                        label="Attended"
+                        value={summary.attended}
+                        color="#15803D"
+                        bg="#F0FDF4"
+                        border="#86EFAC"
+                    />
+                    <SummaryStat
+                        icon="🚫"
+                        label="Missed"
+                        value={summary.missed}
+                        color="#B91C1C"
+                        bg="#FFF1F2"
+                        border="#FECACA"
+                    />
+                    <SummaryStat
+                        icon="❌"
+                        label="Cancelled"
+                        value={summary.cancelled}
+                        color="#475569"
+                        bg="#F8FAFC"
+                        border="#CBD5E1"
+                    />
+                    {summary.pct !== null && (
+                        <SummaryStat
+                            icon="📈"
+                            label="Attendance %"
+                            value={`${summary.pct}%`}
+                            color={summary.pct >= 75 ? '#15803D' : summary.pct >= 50 ? '#92400E' : '#B91C1C'}
+                            bg={summary.pct >= 75 ? '#F0FDF4' : summary.pct >= 50 ? '#FFFBEB' : '#FFF1F2'}
+                            border={summary.pct >= 75 ? '#86EFAC' : summary.pct >= 50 ? '#FCD34D' : '#FECACA'}
+                        />
+                    )}
                 </div>
+            )}
 
-                {/* Table */}
+            {/* ── Filter Bar ── */}
+            <FilterBar filters={appliedFilters} onApply={handleFilterApply} />
+
+            {/* ── Table Card ── */}
+            <Card noPad>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                         <thead>
-                            <tr style={{ borderBottom: '1.5px solid var(--color-border)' }}>
-                                {['Date', 'Meal', 'Slot', 'Status', 'Feedback', 'Action'].map(h => (
+                            <tr style={{ borderBottom: '2px solid var(--color-border)', background: 'var(--color-bg)' }}>
+                                {['Meal', 'Slot', 'Status', 'Feedback', 'Action'].map(h => (
                                     <th
                                         key={h}
                                         style={{
-                                            padding: '0.75rem 1rem',
+                                            padding: '12px 16px',
                                             textAlign: 'left',
-                                            fontSize: '0.75rem',
-                                            fontWeight: 700,
+                                            fontSize: '0.72rem',
+                                            fontWeight: 800,
                                             color: 'var(--color-text-muted)',
                                             textTransform: 'uppercase',
-                                            letterSpacing: '0.06em',
+                                            letterSpacing: '0.07em',
                                             whiteSpace: 'nowrap',
                                         }}
                                     >
@@ -374,158 +579,124 @@ export default function MealHistory() {
                         </thead>
                         <tbody>
                             {loading ? (
-                                Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
+                                Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                             ) : rows.length === 0 ? (
                                 <tr>
                                     <td colSpan={6}>
-                                        <div className="empty-state py-14">
-                                            <div className="empty-state-icon">📜</div>
-                                            <p className="empty-state-text">No meals recorded yet</p>
-                                            <p className="empty-state-sub">
-                                                Your meal bookings will appear here once you start booking meals.
+                                        <div style={{
+                                            display: 'flex', flexDirection: 'column',
+                                            alignItems: 'center', justifyContent: 'center',
+                                            padding: '56px 24px', textAlign: 'center',
+                                        }}>
+                                            <div style={{ fontSize: '3rem', marginBottom: 12, opacity: 0.5 }}>📅</div>
+                                            <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
+                                                No meals found for selected range
+                                            </p>
+                                            <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', maxWidth: 280, lineHeight: 1.6 }}>
+                                                Try adjusting your filters or expanding the date range.
                                             </p>
                                         </div>
                                     </td>
                                 </tr>
                             ) : (
-                                rows.map((row, idx) => {
-                                    const isEven = idx % 2 === 0;
-                                    const derivedStatus = row.derivedStatus;
-                                    const feedback = feedbackMap[row.id];
-
-                                    // Can submit feedback?
-                                    const canRate =
-                                        derivedStatus === 'attended' &&
-                                        !feedback;
-
-                                    // Format date
-                                    const dateLabel = (() => {
-                                        try { return format(parseISO(row.date), 'dd MMM yyyy'); }
-                                        catch { return row.date; }
-                                    })();
-
-                                    // Slot label
-                                    const slotLabel = row.slot_time
-                                        ? row.slot_time.slice(0, 5)
-                                        : <span className="text-text-muted">—</span>;
-
-                                    return (
-                                        <tr
-                                            key={row.id}
-                                            style={{
-                                                backgroundColor: isEven ? 'transparent' : 'var(--color-surface-hover)',
-                                                transition: 'background 0.15s',
-                                                cursor: 'default',
-                                            }}
-                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(37,99,235,0.04)'}
-                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = isEven ? 'transparent' : 'var(--color-surface-hover)'}
-                                        >
-                                            {/* Date */}
-                                            <td style={{ padding: '0.875rem 1rem', color: 'var(--color-text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                                {dateLabel}
-                                            </td>
-
-                                            {/* Meal Type */}
-                                            <td style={{ padding: '0.875rem 1rem' }}>
-                                                <span className="flex items-center gap-1.5 font-medium text-text-secondary">
-                                                    <span>{MEAL_ICONS[row.meal_type]}</span>
-                                                    <span>{MEAL_LABELS[row.meal_type]}</span>
-                                                </span>
-                                            </td>
-
-                                            {/* Slot */}
-                                            <td style={{ padding: '0.875rem 1rem', color: 'var(--color-text-secondary)' }}>
-                                                {slotLabel}
-                                            </td>
-
-                                            {/* Status Badge */}
-                                            <td style={{ padding: '0.875rem 1rem' }}>
-                                                <StatusBadge status={derivedStatus} />
-                                            </td>
-
-                                            {/* Feedback display */}
-                                            <td style={{ padding: '0.875rem 1rem' }}>
-                                                {feedback ? (
-                                                    <CommentTooltip comment={feedback.comment}>
-                                                        <span className="flex items-center gap-1 cursor-default">
-                                                            <StarDisplay rating={feedback.rating} />
-                                                            {feedback.comment && (
-                                                                <span className="text-xs text-text-muted ml-1" title={feedback.comment}>💬</span>
-                                                            )}
-                                                        </span>
-                                                    </CommentTooltip>
-                                                ) : derivedStatus === 'attended' ? (
-                                                    <span className="text-xs text-text-muted">Not rated</span>
-                                                ) : (
-                                                    <span className="text-text-muted" style={{ fontSize: '0.75rem' }}>—</span>
-                                                )}
-                                            </td>
-
-                                            {/* Action */}
-                                            <td style={{ padding: '0.875rem 1rem' }}>
-                                                {canRate ? (
-                                                    <button
-                                                        className="btn btn-xs"
-                                                        style={{
-                                                            background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)',
-                                                            border: '1.5px solid #FED7AA',
-                                                            color: '#C2410C',
-                                                            fontWeight: 600,
-                                                        }}
-                                                        onClick={() => setFeedbackModal({ bookingId: row.id, mealType: row.meal_type })}
-                                                    >
-                                                        ⭐ Rate Now
-                                                    </button>
-                                                ) : (
-                                                    <span className="text-text-muted" style={{ fontSize: '0.75rem' }}>—</span>
-                                                )}
+                                groupedByDate.map(([dateStr, dateRows]) => (
+                                    <>
+                                        {/* Date group divider */}
+                                        <tr key={`group-${dateStr}`}>
+                                            <td
+                                                colSpan={5}
+                                                style={{
+                                                    padding: '8px 16px 6px',
+                                                    background: 'var(--color-bg)',
+                                                    borderTop: '1px solid var(--color-border)',
+                                                    borderBottom: '1px solid var(--color-border)',
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--color-text-secondary)', letterSpacing: '-0.01em' }}>
+                                                        {formatDate(dateStr)}
+                                                    </span>
+                                                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                                        {formatDayOfWeek(dateStr)}
+                                                    </span>
+                                                </div>
                                             </td>
                                         </tr>
-                                    );
-                                })
+
+                                        {/* Rows for this date */}
+                                        {dateRows.map((row) => {
+                                            const derivedStatus = row.derivedStatus;
+                                            const feedback = feedbackMap[row.id];
+
+                                            return (
+                                                <tr
+                                                    key={row.id}
+                                                    style={{
+                                                        borderBottom: '1px solid var(--color-border)',
+                                                        transition: 'background 0.15s',
+                                                        cursor: 'default',
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(37,99,235,0.035)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                >
+                                                    {/* Meal Type */}
+                                                    <td style={{ padding: '14px 16px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <span
+                                                                style={{
+                                                                    width: 32, height: 32, borderRadius: 8,
+                                                                    background: 'var(--color-bg)',
+                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    fontSize: '1rem', flexShrink: 0,
+                                                                    border: '1px solid var(--color-border)',
+                                                                }}
+                                                            >
+                                                                {MEAL_ICONS[row.meal_type]}
+                                                            </span>
+                                                            <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.875rem' }}>
+                                                                {MEAL_LABELS[row.meal_type]}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Slot */}
+                                                    <td style={{ padding: '14px 16px' }}>
+                                                        {formatSlot(row.slot_time, row.meal_type)}
+                                                    </td>
+
+                                                    {/* Status */}
+                                                    <td style={{ padding: '14px 16px' }}>
+                                                        <StatusBadge status={derivedStatus} />
+                                                    </td>
+
+                                                    {/* Feedback */}
+                                                    <td style={{ padding: '14px 16px' }}>
+                                                        <FeedbackCell
+                                                            feedback={feedback}
+                                                            derivedStatus={derivedStatus}
+                                                            onRate={() => setFeedbackModal({ bookingId: row.id, mealType: row.meal_type })}
+                                                        />
+                                                    </td>
+
+                                                    {/* Action — reserved for future row-level actions */}
+                                                    <td style={{ padding: '14px 16px' }}>
+                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>—</span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </>
+                                ))
                             )}
                         </tbody>
                     </table>
                 </div>
 
                 {/* Pagination */}
-                <div className="px-6 pb-5">
+                <div style={{ padding: '0 16px 16px' }}>
                     <Pagination page={page} total={total} onPage={setPage} />
                 </div>
             </Card>
-
-            {/* Summary stats strip */}
-            {!loading && rows.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                        { label: 'Attended', val: rows.filter(r => r.derivedStatus === 'attended').length, color: '#16A34A', bg: '#DCFCE7', icon: '✅' },
-                        { label: 'Missed', val: rows.filter(r => r.derivedStatus === 'missed').length, color: '#DC2626', bg: '#FEE2E2', icon: '⚠️' },
-                        { label: 'Cancelled', val: rows.filter(r => r.derivedStatus === 'cancelled').length, color: '#64748B', bg: '#F1F5F9', icon: '❌' },
-                        { label: 'On Leave', val: rows.filter(r => r.derivedStatus === 'on_leave').length, color: '#1E40AF', bg: '#DBEAFE', icon: '🏖️' },
-                    ].map(({ label, val, color, bg, icon }) => (
-                        <div
-                            key={label}
-                            className="card"
-                            style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}
-                        >
-                            <div
-                                style={{
-                                    width: 40, height: 40, borderRadius: 10,
-                                    background: bg, display: 'flex',
-                                    alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '1.125rem', flexShrink: 0,
-                                }}
-                            >
-                                {icon}
-                            </div>
-                            <div>
-                                <p style={{ fontSize: '1.375rem', fontWeight: 800, color, lineHeight: 1 }}>{val}</p>
-                                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 2 }}>{label}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
 
             {/* Feedback Modal */}
             <FeedbackModal

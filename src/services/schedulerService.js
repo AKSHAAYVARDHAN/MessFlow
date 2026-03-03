@@ -103,7 +103,8 @@ export const schedulerService = {
      * - Only marks bookings still in 'booked' state (idempotent).
      * - Skips meals where the window hasn't closed yet.
      * - Skips students on approved leave for that meal.
-     * - Fetches fresh no_show_count before each increment (no race drift).
+     * - After marking, recalculates total no_show_count from bookings
+     *   table for each affected user (source of truth sync).
      * - If no_show_count >= 3 → disables auto-booking.
      * - Updates last_no_show_date for admin visibility.
      */
@@ -122,6 +123,8 @@ export const schedulerService = {
 
         let marked = 0;
         const skippedLeave = [];
+        // Track which users were affected so we can resync their count once
+        const affectedUsers = new Set();
 
         for (const booking of (unscanned || [])) {
             const mealEndHour = MEAL_END_HOURS[booking.meal_type];
@@ -169,21 +172,29 @@ export const schedulerService = {
                 continue;
             }
 
-            // ── Atomically increment via Postgres RPC ────────────────────
-            // Using an RPC function (SECURITY DEFINER) instead of a direct
-            // client update ensures RLS cannot silently block the increment,
-            // and the count + last_no_show_date + disable logic all run
-            // atomically in a single DB round-trip.
-            const { error: rpcErr } = await supabase.rpc('increment_no_show', {
-                uid: booking.user_id,
+            affectedUsers.add(booking.user_id);
+            marked++;
+        }
+
+        // ── Resync users.no_show_count from bookings (source of truth) ──
+        // For each affected user, count all their no_show bookings and
+        // update users table accordingly. This keeps the users table
+        // consistent even if the RPC previously failed or was skipped.
+        for (const userId of affectedUsers) {
+            const { error: rpcErr } = await supabase.rpc('sync_no_show_count', {
+                uid: userId,
             });
 
             if (rpcErr) {
-                console.warn('increment_no_show RPC failed:', rpcErr.message);
-                continue;
+                // Fallback: use the old increment RPC if new sync RPC not available
+                console.warn('sync_no_show_count RPC failed, falling back to increment_no_show:', rpcErr.message);
+                const { error: incrErr } = await supabase.rpc('increment_no_show', {
+                    uid: userId,
+                });
+                if (incrErr) {
+                    console.warn('increment_no_show RPC also failed:', incrErr.message);
+                }
             }
-
-            marked++;
         }
 
         return { marked, skippedLeave: skippedLeave.length };
