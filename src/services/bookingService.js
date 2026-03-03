@@ -37,6 +37,36 @@ export const bookingService = {
         return data || [];
     },
 
+    // ── Count-only queries (head: true — no row data transferred) ─────────
+    async getBookingCountByDate(date) {
+        const { count, error } = await supabase
+            .from('bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('date', date);
+        if (error) throw error;
+        return count || 0;
+    },
+
+    async getCancellationCountByDate(date) {
+        const { count, error } = await supabase
+            .from('bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('date', date)
+            .eq('status', 'cancelled');
+        if (error) throw error;
+        return count || 0;
+    },
+
+    async getNoShowCountByDate(date) {
+        const { count, error } = await supabase
+            .from('bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('date', date)
+            .eq('status', 'no_show');
+        if (error) throw error;
+        return count || 0;
+    },
+
     async getSlotDistribution(date, mealType) {
         const { data, error } = await supabase
             .from('bookings')

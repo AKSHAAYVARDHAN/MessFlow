@@ -36,10 +36,13 @@ export const menuService = {
      * @param {string} userId - UUID of the admin performing the update
      */
     async upsertMenu(date, mealType, items, userId) {
+        // DB CHECK constraint requires title-cased values: 'Breakfast' | 'Lunch' | 'Dinner'
+        const dbMealType = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+
         const { data, error } = await supabase
             .from('menus')
             .upsert(
-                { date, meal_type: mealType, items, updated_by: userId },
+                { date, meal_type: dbMealType, items, updated_by: userId },
                 { onConflict: 'date,meal_type' }
             )
             .select()
@@ -48,13 +51,14 @@ export const menuService = {
 
         // Auto-create announcement
         const friendlyDate = format(new Date(date + 'T00:00:00'), 'MMM d');
-        const title = `Menu updated for ${MEAL_LABEL[mealType]} on ${friendlyDate}`;
-        const description = `The ${MEAL_LABEL[mealType].toLowerCase()} menu has been updated. Check today's menu for details.`;
+        const label = MEAL_LABEL[mealType] || dbMealType;
+        const title = `Menu updated for ${label} on ${friendlyDate}`;
+        const description = `The ${label.toLowerCase()} menu has been updated. Check today's menu for details.`;
 
         await supabase.from('announcements').insert({
             title,
             description,
-            meal_type: mealType,
+            meal_type: dbMealType,
             date,
             is_important: false,
         });

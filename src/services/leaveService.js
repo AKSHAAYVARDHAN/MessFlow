@@ -126,6 +126,20 @@ export const leaveService = {
         return toCancel.length;
     },
 
+    // ── Admin: count-only active leaves (head: true) ────────────────────────
+    async getActiveLeavesCount(filterDate) {
+        const today = new Date().toISOString().split('T')[0];
+        const date = filterDate || today;
+
+        const { count, error } = await supabase
+            .from('leaves')
+            .select('*', { count: 'exact', head: true })
+            .lte('from_date', date)
+            .gte('to_date', date);
+        if (error) throw error;
+        return count || 0;
+    },
+
     // ── Admin: get all active leaves (to_date >= today) with user info ────────
     async getAllActiveLeaves(filterDate) {
         const today = new Date().toISOString().split('T')[0];

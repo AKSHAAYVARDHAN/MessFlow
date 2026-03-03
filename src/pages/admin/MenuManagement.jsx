@@ -39,9 +39,10 @@ export default function MenuManagement() {
         try {
             const rows = await menuService.getMenusByDate(date);
             const map = {};
-            rows.forEach((r) => (map[r.meal_type] = r));
+            // Normalize DB keys to lowercase so they match MEALS keys ('breakfast'/'lunch'/'dinner')
+            rows.forEach((r) => (map[r.meal_type.toLowerCase()] = r));
             setMenus(map);
-            // populate drafts from saved data
+            // Populate drafts with saved data so textareas are pre-filled
             setDrafts({
                 breakfast: map.breakfast?.items || '',
                 lunch: map.lunch?.items || '',
@@ -118,9 +119,14 @@ export default function MenuManagement() {
                                     {/* Saved preview */}
                                     {savedItems.length > 0 && (
                                         <div className="p-3 rounded-lg bg-success/5 border border-success/20">
-                                            <p className="text-xs font-semibold text-success mb-2">
-                                                ✓ Currently saved
-                                            </p>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <p className="text-xs font-semibold text-success">✓ Currently saved</p>
+                                                {saved?.updated_at && (
+                                                    <p className="text-xs text-text-muted">
+                                                        Updated {format(new Date(saved.updated_at), 'MMM d, h:mm a')}
+                                                    </p>
+                                                )}
+                                            </div>
                                             <ul className="space-y-1">
                                                 {savedItems.map((item, i) => (
                                                     <li key={i} className="text-xs text-text-secondary flex items-start gap-1.5">
@@ -151,10 +157,10 @@ export default function MenuManagement() {
 
                                     <button
                                         onClick={() => handleSave(key)}
-                                        disabled={saving[key] || !drafts[key].trim()}
+                                        disabled={saving[key] || !hasChanges || !drafts[key].trim()}
                                         className={`btn w-full text-sm ${hasChanges && drafts[key].trim()
-                                                ? 'btn-primary'
-                                                : 'btn-ghost'
+                                            ? 'btn-primary'
+                                            : 'btn-ghost'
                                             }`}
                                     >
                                         {saving[key] ? (

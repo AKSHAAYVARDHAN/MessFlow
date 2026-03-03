@@ -216,8 +216,9 @@ export default function TodayStatus() {
     };
 
     const menuMap = {};
-    todayMenus.forEach((m) => (menuMap[m.meal_type] = m));
-    const hasMenu = MEAL_SEQUENCE.some((m) => menuMap[m]);
+    // Normalize DB meal_type ('Breakfast') to lowercase so MEAL_SEQUENCE lookups work
+    todayMenus.forEach((m) => (menuMap[m.meal_type.toLowerCase()] = m));
+    const hasMenu = todayMenus.length > 0;
 
     const importantAnn = announcements.filter((a) => a.is_important);
     const regularAnn = announcements.filter((a) => !a.is_important);
@@ -456,15 +457,14 @@ export default function TodayStatus() {
                     {todayMenus.length === 0 ? (
                         <div className="empty-state py-6">
                             <div className="empty-state-icon">🥗</div>
-                            <p className="empty-state-text">Menu not set yet</p>
+                            <p className="empty-state-text">Menu not available</p>
                             <p className="empty-state-sub">Check back once the admin updates today's menu.</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-3">
                             {MEAL_SEQUENCE.map((meal) => {
                                 const m = menuMap[meal];
-                                if (!m) return null;
-                                const items = parseMenuItems(m.items);
+                                const items = m ? parseMenuItems(m.items) : [];
                                 return (
                                     <div key={meal} className="flex gap-3">
                                         <div className="w-8 h-8 rounded-lg bg-surface-hover flex items-center justify-center text-base flex-shrink-0">
@@ -472,9 +472,13 @@ export default function TodayStatus() {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-semibold text-text">{MEAL_LABEL[meal]}</p>
-                                            <p className="text-xs text-text-secondary truncate-2 mt-0.5">
-                                                {items.join(' · ')}
-                                            </p>
+                                            {items.length > 0 ? (
+                                                <p className="text-xs text-text-secondary truncate-2 mt-0.5">
+                                                    {items.join(' · ')}
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-text-muted mt-0.5 italic">Menu not available</p>
+                                            )}
                                         </div>
                                     </div>
                                 );

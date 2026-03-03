@@ -95,8 +95,8 @@ function parseCSV(text) {
 function buildTemplate(csvRows) {
     const template = {};
     for (const row of csvRows) {
-        const day = row.weekday.toLowerCase();
-        const meal = row.meal_type.toLowerCase();
+        const day = row.weekday.trim().toLowerCase();
+        const meal = row.meal_type.trim().toLowerCase();
         // Convert literal "\n" strings in CSV → real newlines
         const items = row.items.replace(/\\n/g, '\n');
         if (!template[day]) template[day] = {};
@@ -107,6 +107,21 @@ function buildTemplate(csvRows) {
 
 // ── Day index → weekday name (date-fns getDay: 0=Sun, 1=Mon … 6=Sat) ─────────
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+// ── Normalize meal_type to match DB CHECK constraint exactly ──────────────────
+// Live DB allows: 'Breakfast' | 'Lunch' | 'Dinner'  (Title Case)
+const MEAL_TYPE_MAP = {
+    breakfast: 'Breakfast',
+    lunch: 'Lunch',
+    dinner: 'Dinner',
+};
+function normalizeMealType(raw) {
+    const key = raw.trim().toLowerCase();
+    if (!MEAL_TYPE_MAP[key]) {
+        throw new Error(`Unknown meal_type: "${raw}" — must be breakfast, lunch, or dinner`);
+    }
+    return MEAL_TYPE_MAP[key];
+}
 
 // ── Generate all rows ─────────────────────────────────────────────────────────
 function generateRows(template) {
@@ -126,12 +141,14 @@ function generateRows(template) {
         }
 
         for (const meal of MEALS) {
-            const items = dayTemplate[meal];
+            // Normalize meal_type — must match DB CHECK constraint exactly (Title Case)
+            const meal_type = normalizeMealType(meal);
+            const items = dayTemplate[meal]; // template keys stay lowercase
             if (!items) {
-                console.warn(`⚠️  No items for ${dayName} ${meal}`);
+                console.warn(`⚠️  No items for ${dayName} ${meal_type}`);
                 continue;
             }
-            rows.push({ date: dateStr, meal_type: meal, items });
+            rows.push({ date: dateStr, meal_type, items });
         }
     }
     return rows;
@@ -229,7 +246,7 @@ async function main() {
     console.log('');
     console.log("   -- Verify weekly repeat (three consecutive Mondays)");
     console.log("   SELECT date, meal_type, items FROM menus");
-    console.log("   WHERE meal_type = 'breakfast'");
+    console.log("   WHERE meal_type = 'Breakfast'");
     console.log("     AND date IN ('2026-01-05','2026-01-12','2026-01-19')");
     console.log("   ORDER BY date;");
     console.log('');
