@@ -629,4 +629,17 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  /* ─── Meal Stats Grid (responsive) ─────────────────────────────── */
+  @media (max-width: 900px) {
+    .meal-stats-grid {
+      grid-template-columns: repeat(3, 1fr) !important;
+    }
+  }
+
+  @media (max-width: 580px) {
+    .meal-stats-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+  }
 }

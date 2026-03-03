@@ -1,0 +1,22 @@
+weekday,meal_type,items
+monday,breakfast,Idly\nSambar\nCoconut Chutney\nFilter Coffee
+monday,lunch,Steamed Rice\nDal Tadka\nAloo Gobi\nCurd\nPickle\nRotis
+monday,dinner,Chapati\nPaneer Butter Masala\nDal Makhani\nSteamed Rice\nSalad
+tuesday,breakfast,Poha\nGreen Chutney\nBoiled Egg\nMilk
+tuesday,lunch,Steamed Rice\nRajma Curry\nBhindi Fry\nCurd\nPickle\nRotis
+tuesday,dinner,Chapati\nChicken Curry\nSteamed Rice\nRaita\nSalad
+wednesday,breakfast,Upma\nCoconut Chutney\nBanana\nFilter Coffee
+wednesday,lunch,Steamed Rice\nChole Masala\nAloo Jeera\nCurd\nPickle\nRotis
+wednesday,dinner,Chapati\nMixed Veg Curry\nDal Fry\nSteamed Rice\nPapad
+thursday,breakfast,Dosa\nSambar\nTomato Chutney\nFilter Coffee
+thursday,lunch,Steamed Rice\nMoong Dal\nEgg Curry\nCurd\nPickle\nRotis
+thursday,dinner,Puri\nAloo Sabji\nKheer\nSalad
+friday,breakfast,Rava Idly\nCoconut Chutney\nSambar\nFilter Coffee
+friday,lunch,Steamed Rice\nDal Tadka\nPalak Paneer\nCurd\nPickle\nRotis
+friday,dinner,Chapati\nFish Curry\nSteamed Rice\nRaita\nSalad
+saturday,breakfast,Set Dosa\nSaggu Bajji\nGreen Chutney\nMilk
+saturday,lunch,Veg Biryani\nMirchi Ka Salan\nBoondi Raita\nPapad
+saturday,dinner,Chapati\nMutton Curry\nSteamed Rice\nDal Fry\nSalad
+sunday,breakfast,Puri\nAloo Masala\nFilter Coffee\nFruit
+sunday,lunch,Chicken Biryani\nOnion Raita\nMirchi Ka Salan\nPickle\nPapad
+sunday,dinner,Chapati\nPaneer Tikka Masala\nSteamed Rice\nDal Makhani\nSalad
