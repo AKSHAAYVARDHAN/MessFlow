@@ -3,7 +3,7 @@ import { bookingService } from '../services/bookingService';
 import { useAuth } from '../contexts/AuthContext';
 import { getToday } from '../utils/dateHelpers';
 
-export function useBookings() {
+export function useBookings(date) {
     const { user } = useAuth();
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -13,7 +13,7 @@ export function useBookings() {
         if (!user) return;
         try {
             setLoading(true);
-            const data = await bookingService.getTodayBookings(user.id);
+            const data = await bookingService.getTodayBookings(user.id, date);
             setBookings(data);
             setError(null);
         } catch (err) {

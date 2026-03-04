@@ -65,3 +65,29 @@ export function getCancellationDeadlineLabel(mealType) {
     const displayMin = String(m).padStart(2, '0');
     return `${displayHour}:${displayMin} ${period}`;
 }
+
+// ─── Next-Day Booking Helpers ─────────────────────────────────────────────────
+
+const DINNER_CUTOFF_MINUTES = 20 * 60 + 30; // 8:30 PM
+
+/**
+ * Returns booking date as 'yyyy-MM-dd'.
+ * Before 8:30 PM → today.
+ * After  8:30 PM → tomorrow (next-day booking mode).
+ */
+export function getBookingDate() {
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const d = new Date();
+    if (mins > DINNER_CUTOFF_MINUTES) d.setDate(d.getDate() + 1);
+    return format(d, 'yyyy-MM-dd');
+}
+
+/**
+ * Returns true when the current time is past 8:30 PM,
+ * meaning the booking mode has switched to tomorrow.
+ */
+export function isTomorrowBooking() {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes() > DINNER_CUTOFF_MINUTES;
+}

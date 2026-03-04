@@ -14,7 +14,7 @@ import { menuService } from '../../services/menuService';
 import { feedbackService } from '../../services/feedbackService';
 import { supabase } from '../../services/supabase';
 import { MEAL_ICONS, CANCELLATION_DEADLINES } from '../../utils/constants';
-import { getToday, canCancelMeal, getTimeRemaining, getCancellationDeadlineLabel, formatDate } from '../../utils/dateHelpers';
+import { getToday, canCancelMeal, getTimeRemaining, getCancellationDeadlineLabel, formatDate, getBookingDate, isTomorrowBooking } from '../../utils/dateHelpers';
 import { format } from 'date-fns';
 import { NavLink } from 'react-router-dom';
 
@@ -25,6 +25,26 @@ const MEAL_ICON_MAP = { breakfast: '☀️', lunch: '🍽️', dinner: '🌙' };
 
 function parseMenuItems(text) {
     return (text || '').split('\n').map((s) => s.trim()).filter(Boolean);
+}
+
+// ─── Booking Cut-Off Helper ───────────────────────────────────────────────────
+// In tomorrow-booking mode (past 8:30 PM) ALL meals for tomorrow are open.
+// In today-booking mode, apply normal per-meal cutoff.
+function isBookingOpen(mealType, tomorrowMode) {
+    if (tomorrowMode) return true;
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // Cutoff times (inclusive — booking is open UP TO and INCLUDING the cutoff minute)
+    const cutoffTimes = {
+        breakfast: 8 * 60 + 30,   // 8:30 AM
+        lunch: 13 * 60 + 30,      // 1:30 PM
+        dinner: 20 * 60 + 30,     // 8:30 PM
+    };
+
+    const cutoff = cutoffTimes[mealType];
+    return cutoff !== undefined && currentMinutes <= cutoff;
 }
 
 // ─── Countdown Timer ─────────────────────────────────────────────────────────
@@ -62,7 +82,12 @@ function Countdown({ mealType }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function TodayStatus() {
     const { user, profile, refreshProfile } = useAuth();
-    const { bookings, loading, refetch, getBookingByMeal } = useBookings();
+
+    // ── Booking date resolution (next-day logic) ───────────────────────────────
+    const isTomorrow = isTomorrowBooking();
+    const bookingDate = getBookingDate(); // 'yyyy-MM-dd' — today or tomorrow
+
+    const { bookings, loading, refetch, getBookingByMeal } = useBookings(bookingDate);
     const toast = useToast();
     const [announcements, setAnnouncements] = useState([]);
     const [todayMenus, setTodayMenus] = useState([]);
@@ -80,9 +105,9 @@ export default function TodayStatus() {
     const [feedbackMap, setFeedbackMap] = useState({});       // bookingId -> feedback record
     const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
-    const today = getToday();
+    const today = getToday(); // always the ACTUAL current day (for leave / menus / announcements)
 
-    useRealtimeBookings(today, () => refetch());
+    useRealtimeBookings(bookingDate, () => refetch());
 
     useEffect(() => {
         announcementService.getAnnouncementsByDate(today).then(setAnnouncements).catch(console.error);
@@ -137,10 +162,18 @@ export default function TodayStatus() {
     async function confirmBookMeal() {
         if (!bookModal || bookingMeal) return;
         const { mealType } = bookModal;
+
+        // Guard: prevent API call if booking window has closed
+        if (!isBookingOpen(mealType, isTomorrow)) {
+            toast.error('Booking Closed', 'The booking time for this meal has passed.');
+            setBookModal(null);
+            return;
+        }
+
         setBookingMeal(mealType);
         setBookModal(null);
         try {
-            await bookingService.createBooking(user.id, today, mealType);
+            await bookingService.createBooking(user.id, bookingDate, mealType);
             toast.success(`${mealType.charAt(0).toUpperCase() + mealType.slice(1)} booked!`, 'Your QR code is ready.');
             await refetch();
         } catch (err) {
@@ -228,13 +261,22 @@ export default function TodayStatus() {
             {/* ── TOP SECTION: Summary + Auto Booking ── */}
             <div className="flex flex-col sm:flex-row gap-4">
                 {/* Date summary card */}
-                <div className="card flex-1 flex items-center gap-4" style={{ background: 'linear-gradient(135deg, #EFF6FF 0%, #EEF2FF 100%)', borderColor: '#BFDBFE' }}>
-                    <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
-                        📅
+                <div className="card flex-1 flex items-center gap-4" style={{
+                    background: isTomorrow
+                        ? 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)'
+                        : 'linear-gradient(135deg, #EFF6FF 0%, #EEF2FF 100%)',
+                    borderColor: isTomorrow ? '#86EFAC' : '#BFDBFE',
+                }}>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 ${isTomorrow ? 'bg-green-100' : 'bg-blue-100'}`}>
+                        {isTomorrow ? '🌙' : '📅'}
                     </div>
                     <div>
-                        <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-0.5">Today</p>
-                        <p className="text-base font-bold text-text">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+                        <p className={`text-xs font-semibold uppercase tracking-wider mb-0.5 ${isTomorrow ? 'text-green-600' : 'text-blue-500'}`}>
+                            {isTomorrow ? 'Tomorrow' : 'Today'}
+                        </p>
+                        <p className="text-base font-bold text-text">
+                            {format(new Date(bookingDate + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}
+                        </p>
                         <p className="text-sm text-text-secondary mt-0.5">
                             {bookings.filter(b => b.status !== 'cancelled').length} of 3 meals booked
                         </p>
@@ -302,10 +344,24 @@ export default function TodayStatus() {
                 </div>
             )}
 
+            {/* ── BOOKING STATUS BANNER ── */}
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${isTomorrow
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-blue-50 border-blue-200'
+                }`}>
+                <span className="text-xl flex-shrink-0">{isTomorrow ? '🌙' : '✅'}</span>
+                <p className={`text-sm font-semibold ${isTomorrow ? 'text-green-700' : 'text-blue-700'
+                    }`}>
+                    {isTomorrow
+                        ? "Booking open for tomorrow's meals"
+                        : "Booking open for today's meals"}
+                </p>
+            </div>
+
             {/* ── SECOND SECTION: Meal Cards ── */}
             <div>
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="section-title">Today's Meals</h3>
+                    <h3 className="section-title">{isTomorrow ? "Tomorrow's Meals" : "Today's Meals"}</h3>
                     <span className="text-sm text-text-muted">
                         {bookings.filter(b => b.status === 'booked').length} booked
                     </span>
@@ -327,18 +383,19 @@ export default function TodayStatus() {
                             const isBooking = bookingMeal === meal;
                             const isCancelling = cancellingMeal === meal;
                             const onLeave = isMealOnLeave(meal);
+                            const bookingOpen = isBookingOpen(meal, isTomorrow);
 
                             const statusBadge = onLeave ? 'On Leave' :
                                 isCancelling ? 'Cancelling…' :
                                     isBooking ? 'Booking…' :
                                         booking ? booking.status :
-                                            'No Booking';
+                                            bookingOpen ? 'Open' : 'Closed';
 
                             const badgeType = onLeave ? 'badge-info' :
                                 booking?.status === 'booked' ? 'badge-success' :
                                     booking?.status === 'scanned' ? 'badge-info' :
                                         isCancelling || isBooking ? 'badge-warning' :
-                                            'badge-muted';
+                                            bookingOpen ? 'badge-success' : 'badge-muted';
 
                             return (
                                 <Card
@@ -424,7 +481,7 @@ export default function TodayStatus() {
                                                 <p className="text-sm font-semibold text-danger">No Show</p>
                                                 <p className="text-xs text-text-muted">You missed this meal</p>
                                             </div>
-                                        ) : (
+                                        ) : bookingOpen ? (
                                             <div className="flex flex-col items-center justify-center py-8 space-y-3">
                                                 <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-3xl mb-1">🍴</div>
                                                 <p className="text-sm text-text-secondary">No booking yet</p>
@@ -439,6 +496,19 @@ export default function TodayStatus() {
                                                             Booking…
                                                         </span>
                                                     ) : 'Book Now'}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-8 space-y-2">
+                                                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-3xl mb-1">🔒</div>
+                                                <p className="text-sm font-semibold text-text-secondary">Booking Closed</p>
+                                                <p className="text-xs text-text-muted text-center px-2">The booking window for this meal has passed.</p>
+                                                <button
+                                                    disabled
+                                                    className="btn btn-sm opacity-40 cursor-not-allowed"
+                                                    style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+                                                >
+                                                    Booking Closed
                                                 </button>
                                             </div>
                                         )}
@@ -543,7 +613,10 @@ export default function TodayStatus() {
                         </div>
                         <div className="flex items-center justify-between text-sm">
                             <span className="text-text-muted font-medium">Date</span>
-                            <span className="font-semibold text-text">{format(new Date(), 'EEE, MMM dd, yyyy')}</span>
+                            <span className="font-semibold text-text">
+                                {format(new Date(bookingDate + 'T12:00:00'), 'EEE, MMM dd, yyyy')}
+                                {isTomorrow && <span className="ml-1.5 text-xs font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-md">Tomorrow</span>}
+                            </span>
                         </div>
                     </div>
                     <div className="flex gap-3">
@@ -569,7 +642,10 @@ export default function TodayStatus() {
                         </div>
                         <div className="flex items-center justify-between text-sm">
                             <span className="text-text-muted font-medium">Date</span>
-                            <span className="font-semibold text-text">{format(new Date(), 'EEE, MMM dd, yyyy')}</span>
+                            <span className="font-semibold text-text">
+                                {format(new Date(bookingDate + 'T12:00:00'), 'EEE, MMM dd, yyyy')}
+                                {isTomorrow && <span className="ml-1.5 text-xs font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-md">Tomorrow</span>}
+                            </span>
                         </div>
                     </div>
                     <p className="text-sm text-text-secondary text-center">

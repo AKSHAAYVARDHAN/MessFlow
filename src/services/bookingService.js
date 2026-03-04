@@ -5,8 +5,8 @@ import { CANCELLATION_DEADLINES } from '../utils/constants';
 
 
 export const bookingService = {
-    async getTodayBookings(userId) {
-        const today = format(new Date(), 'yyyy-MM-dd');
+    async getTodayBookings(userId, date) {
+        const today = date || format(new Date(), 'yyyy-MM-dd');
         const { data, error } = await supabase
             .from('bookings')
             .select('*')
