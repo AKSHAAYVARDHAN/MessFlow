@@ -73,7 +73,7 @@ export const leaveService = {
 
     // ── Get the active leave covering today (for TodayStatus banner) ──────────
     async getActiveLeaveForToday(userId) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString('en-CA');
         const { data, error } = await supabase
             .from('leaves')
             .select('*')
@@ -128,8 +128,7 @@ export const leaveService = {
 
     // ── Admin: count-only active leaves (head: true) ────────────────────────
     async getActiveLeavesCount(filterDate) {
-        const today = new Date().toISOString().split('T')[0];
-        const date = filterDate || today;
+        const date = filterDate || new Date().toLocaleDateString('en-CA');
 
         const { count, error } = await supabase
             .from('leaves')
@@ -140,30 +139,75 @@ export const leaveService = {
         return count || 0;
     },
 
-    // ── Admin: get all active leaves (to_date >= today) with user info ────────
+    // ── Admin: get all active leaves with user info (date-range filter) ────────
     async getAllActiveLeaves(filterDate) {
-        const today = new Date().toISOString().split('T')[0];
-        const date = filterDate || today;
+        const selectedDate = filterDate || new Date().toLocaleDateString('en-CA');
 
-        const { data, error } = await supabase
+        console.log('[LeaveService] getAllActiveLeaves — Selected Date:', selectedDate);
+
+        // Step 1: Fetch leaves without the embedded join.
+        // Using an embedded join like `users(name, email)` can silently return []
+        // when Supabase RLS on the `users` table blocks cross-user rows inside
+        // the PostgREST join context — even if the admin has a SELECT policy.
+        const { data: leaves, error } = await supabase
             .from('leaves')
-            .select('*, users(name, email)')
-            .lte('from_date', date)
-            .gte('to_date', date)
+            .select('*')
+            .lte('from_date', selectedDate)
+            .gte('to_date', selectedDate)
             .order('from_date', { ascending: true });
-        if (error) throw error;
-        return data || [];
+
+        if (error) {
+            console.error('[LeaveService] getAllActiveLeaves error:', error);
+            throw error;
+        }
+
+        console.log('[LeaveService] Leaves fetched:', leaves);
+
+        if (!leaves || leaves.length === 0) return [];
+
+        // Step 2: Collect unique user IDs and fetch their profiles separately.
+        // The admin's RLS policy on `users` allows reading all user rows, and
+        // a direct `.select().in(...)` query respects that policy correctly.
+        const userIds = [...new Set(leaves.map((l) => l.user_id))];
+        const { data: users, error: usersError } = await supabase
+            .from('users')
+            .select('id, name, email')
+            .in('id', userIds);
+
+        if (usersError) {
+            console.error('[LeaveService] Failed to fetch user profiles:', usersError);
+            // Non-fatal: return leaves with empty user info rather than throwing
+        }
+
+        // Step 3: Merge user data into each leave record (same shape as the old embed).
+        const usersById = Object.fromEntries((users || []).map((u) => [u.id, u]));
+        const merged = leaves.map((l) => ({
+            ...l,
+            users: usersById[l.user_id] || null,
+        }));
+
+        console.log('[LeaveService] Merged leaves with users:', merged);
+        return merged;
     },
 
     // ── Admin: get all leaves for a date range (for broader filtering) ────────
     async getLeavesByDateRange(startDate, endDate) {
-        const { data, error } = await supabase
+        const { data: leaves, error } = await supabase
             .from('leaves')
-            .select('*, users(name, email)')
+            .select('*')
             .lte('from_date', endDate)
             .gte('to_date', startDate)
             .order('from_date', { ascending: true });
         if (error) throw error;
-        return data || [];
+        if (!leaves || leaves.length === 0) return [];
+
+        const userIds = [...new Set(leaves.map((l) => l.user_id))];
+        const { data: users } = await supabase
+            .from('users')
+            .select('id, name, email')
+            .in('id', userIds);
+
+        const usersById = Object.fromEntries((users || []).map((u) => [u.id, u]));
+        return leaves.map((l) => ({ ...l, users: usersById[l.user_id] || null }));
     },
 };
