@@ -10,7 +10,8 @@ import { bookingService } from '../../services/bookingService';
 import { menuService } from '../../services/menuService';
 import { supabase } from '../../services/supabase';
 import { DINNER_SLOTS } from '../../utils/constants';
-import { getToday } from '../../utils/dateHelpers';
+import { getBookingDate } from '../../utils/dateHelpers';
+import { isMealClosed } from '../../utils/bookingTime';
 import { format } from 'date-fns';
 
 export default function DinnerSlots() {
@@ -26,13 +27,11 @@ export default function DinnerSlots() {
     const [pendingSlot, setPendingSlot] = useState(null);   // { value, label }
     const [submitting, setSubmitting] = useState(false);    // prevent double-submit
 
-    const today = getToday();
+    // Use shared booking date (today before 8:30 PM, tomorrow after)
+    const today = getBookingDate();
 
-    // Lock slot changes after 6:45 PM
-    const now = new Date();
-    const lockTime = new Date();
-    lockTime.setHours(18, 45, 0, 0);
-    const isLocked = now >= lockTime;
+    // Dinner slot selection is locked after 8:30 PM via central helper
+    const isLocked = isMealClosed('dinner');
 
     async function fetchData() {
         try {
@@ -115,8 +114,12 @@ export default function DinnerSlots() {
             </div>
 
             {isLocked && (
-                <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-warning text-sm font-medium">
-                    ⏰ Slot changes are locked after 6:45 PM
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-warning/10 border border-warning/20">
+                    <span className="text-lg flex-shrink-0">⏰</span>
+                    <div>
+                        <p className="text-sm font-semibold text-warning">Slot changes are locked after 6:45 PM</p>
+                        <p className="text-xs text-text-muted mt-0.5">Booking window was 6:45 PM – 8:30 PM. See you tomorrow!</p>
+                    </div>
                 </div>
             )}
 

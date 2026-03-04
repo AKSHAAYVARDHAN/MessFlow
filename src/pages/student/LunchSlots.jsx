@@ -9,7 +9,8 @@ import { useToast } from '../../components/Toast';
 import { bookingService } from '../../services/bookingService';
 import { menuService } from '../../services/menuService';
 import { LUNCH_SLOTS } from '../../utils/constants';
-import { getToday } from '../../utils/dateHelpers';
+import { getBookingDate } from '../../utils/dateHelpers';
+import { isMealClosed } from '../../utils/bookingTime';
 import { format } from 'date-fns';
 
 export default function LunchSlots() {
@@ -25,7 +26,11 @@ export default function LunchSlots() {
     const [pendingSlot, setPendingSlot] = useState(null);   // { value, label }
     const [submitting, setSubmitting] = useState(false);    // prevent double-submit
 
-    const today = getToday();
+    // Use shared booking date (today before 8:30 PM, tomorrow after)
+    const today = getBookingDate();
+
+    // Lunch booking is locked after 1:30 PM
+    const lunchClosed = isMealClosed('lunch');
 
     async function fetchData() {
         try {
@@ -56,7 +61,7 @@ export default function LunchSlots() {
 
     // Open modal — does NOT book yet
     function handleSelectSlot(slotTime) {
-        if (submitting) return;
+        if (lunchClosed || submitting) return;
         const slot = LUNCH_SLOTS.find((s) => s.value === slotTime);
         setPendingSlot(slot || { value: slotTime, label: slotTime });
     }
@@ -104,6 +109,16 @@ export default function LunchSlots() {
                 </p>
             </div>
 
+            {lunchClosed && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-danger/8 border border-danger/20">
+                    <span className="text-lg flex-shrink-0">🔒</span>
+                    <div>
+                        <p className="text-sm font-semibold text-danger">Lunch booking closed for today</p>
+                        <p className="text-xs text-text-muted mt-0.5">Booking window was 11:00 AM – 1:30 PM. Come back tomorrow!</p>
+                    </div>
+                </div>
+            )}
+
             {/* Today's Lunch Menu */}
             {lunchMenu && (() => {
                 const items = lunchMenu.items.split('\n').map(s => s.trim()).filter(Boolean);
@@ -143,7 +158,7 @@ export default function LunchSlots() {
                                 bookings={allBookings}
                                 activeSlot={myBooking?.slot_time}
                                 onSelect={handleSelectSlot}
-                                disabled={!!pendingSlot || submitting}
+                                disabled={lunchClosed || !!pendingSlot || submitting}
                             />
                         )}
                     </Card>

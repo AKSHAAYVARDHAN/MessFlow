@@ -15,6 +15,7 @@ import { feedbackService } from '../../services/feedbackService';
 import { supabase } from '../../services/supabase';
 import { MEAL_ICONS, CANCELLATION_DEADLINES } from '../../utils/constants';
 import { getToday, canCancelMeal, getTimeRemaining, getCancellationDeadlineLabel, formatDate, getBookingDate, isTomorrowBooking } from '../../utils/dateHelpers';
+import { isMealClosed, secondsUntilCutoff, formatCountdown } from '../../utils/bookingTime';
 import { format } from 'date-fns';
 import { NavLink } from 'react-router-dom';
 
@@ -29,22 +30,42 @@ function parseMenuItems(text) {
 
 // ─── Booking Cut-Off Helper ───────────────────────────────────────────────────
 // In tomorrow-booking mode (past 8:30 PM) ALL meals for tomorrow are open.
-// In today-booking mode, apply normal per-meal cutoff.
+// In today-booking mode, apply normal per-meal cutoff via central bookingTime helper.
 function isBookingOpen(mealType, tomorrowMode) {
     if (tomorrowMode) return true;
+    return !isMealClosed(mealType);
+}
 
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+// ─── Booking Countdown Timer ─────────────────────────────────────────────────
+// Shows live countdown to the booking cutoff for a meal (only while open).
+function BookingCountdown({ mealType, tomorrowMode }) {
+    const [secs, setSecs] = useState(() => secondsUntilCutoff(mealType));
 
-    // Cutoff times (inclusive — booking is open UP TO and INCLUDING the cutoff minute)
-    const cutoffTimes = {
-        breakfast: 8 * 60 + 30,   // 8:30 AM
-        lunch: 13 * 60 + 30,      // 1:30 PM
-        dinner: 20 * 60 + 30,     // 8:30 PM
-    };
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setSecs(secondsUntilCutoff(mealType));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [mealType]);
 
-    const cutoff = cutoffTimes[mealType];
-    return cutoff !== undefined && currentMinutes <= cutoff;
+    // Hide if booking is closed or in tomorrow mode (no cutoff concept)
+    if (tomorrowMode || secs <= 0) return null;
+
+    const isUrgent = secs < 900;   // < 15 min
+    const isCritical = secs < 300; // < 5 min
+
+    return (
+        <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg ${isCritical ? 'bg-danger/10 text-danger border border-danger/20' :
+            isUrgent ? 'bg-warning/10 text-warning border border-warning/20' :
+                'bg-surface-hover text-text-muted border border-border'
+            }`}>
+            <span>⏱</span>
+            <span className="font-medium">
+                {mealType.charAt(0).toUpperCase() + mealType.slice(1)} booking closes in{' '}
+                <strong>{formatCountdown(secs)}</strong>
+            </span>
+        </div>
+    );
 }
 
 // ─── Countdown Timer ─────────────────────────────────────────────────────────
@@ -113,6 +134,55 @@ export default function TodayStatus() {
         announcementService.getAnnouncementsByDate(today).then(setAnnouncements).catch(console.error);
         menuService.getTodayMenus().then(setTodayMenus).catch(console.error);
     }, [today]);
+
+    // ── Auto-book dinner at midnight ───────────────────────────────────────────
+    // If auto_booking_enabled, create a dinner booking for tomorrow at midnight.
+    useEffect(() => {
+        if (!profile?.default_booking_enabled) return;
+
+        async function autoBookDinner() {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const dateStr = tomorrow.toISOString().split('T')[0];
+
+            try {
+                const { data: existing, error: fetchErr } = await supabase
+                    .from('bookings')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .eq('date', dateStr)
+                    .eq('meal_type', 'dinner');
+
+                if (fetchErr) throw fetchErr;
+
+                if (!existing || existing.length === 0) {
+                    const { error: insertErr } = await supabase.from('bookings').insert({
+                        user_id: user.id,
+                        meal_type: 'dinner',
+                        date: dateStr,
+                        status: 'booked',
+                    });
+                    if (insertErr) throw insertErr;
+                    toast.success('Dinner Auto-Booked!', `Dinner for tomorrow (${dateStr}) booked automatically.`);
+                    await refetch();
+                }
+            } catch (err) {
+                console.error('Auto-book dinner failed:', err);
+            }
+        }
+
+        // Schedule auto-book to run at midnight
+        const now = new Date();
+        const midnight = new Date();
+        midnight.setHours(24, 0, 0, 0); // next midnight
+        const msUntilMidnight = midnight - now;
+
+        const timeout = setTimeout(() => {
+            autoBookDinner();
+        }, msUntilMidnight);
+
+        return () => clearTimeout(timeout);
+    }, [profile?.default_booking_enabled, user.id]);
 
     useEffect(() => {
         async function checkLeave() {
@@ -346,8 +416,8 @@ export default function TodayStatus() {
 
             {/* ── BOOKING STATUS BANNER ── */}
             <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${isTomorrow
-                    ? 'bg-green-50 border-green-200'
-                    : 'bg-blue-50 border-blue-200'
+                ? 'bg-green-50 border-green-200'
+                : 'bg-blue-50 border-blue-200'
                 }`}>
                 <span className="text-xl flex-shrink-0">{isTomorrow ? '🌙' : '✅'}</span>
                 <p className={`text-sm font-semibold ${isTomorrow ? 'text-green-700' : 'text-blue-700'
@@ -485,6 +555,7 @@ export default function TodayStatus() {
                                             <div className="flex flex-col items-center justify-center py-8 space-y-3">
                                                 <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-3xl mb-1">🍴</div>
                                                 <p className="text-sm text-text-secondary">No booking yet</p>
+                                                <BookingCountdown mealType={meal} tomorrowMode={isTomorrow} />
                                                 <button
                                                     onClick={() => requestBookMeal(meal)}
                                                     disabled={isBooking}
