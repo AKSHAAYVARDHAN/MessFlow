@@ -5,12 +5,28 @@ import { supabase } from '../../services/supabase';
 import { schedulerService } from '../../services/schedulerService';
 import { useToast } from '../../components/Toast';
 
+function getWarningLevel(count) {
+    if (count >= 5) return { label: 'Critical', badge: 'badge-danger', icon: '🔴' };
+    if (count >= 3) return { label: 'High', badge: 'badge-danger', icon: '🟠' };
+    if (count >= 2) return { label: 'Warning', badge: 'badge-warning', icon: '🟡' };
+    return { label: 'Caution', badge: 'badge-warning', icon: '🟡' };
+}
+
+function formatDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+}
+
 export default function NoShowMonitor() {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [running, setRunning] = useState(false);
     const [resetModal, setResetModal] = useState(null); // { id, name }
     const [resetting, setResetting] = useState(false);
+    const [lastChecked, setLastChecked] = useState(null);
     const toast = useToast();
 
     useEffect(() => {
@@ -28,6 +44,7 @@ export default function NoShowMonitor() {
                 .order('no_show_count', { ascending: false });
             if (error) throw error;
             setStudents(data || []);
+            setLastChecked(new Date());
         } catch (err) {
             console.error('Failed to fetch students:', err);
             toast.error('Load failed', 'Could not fetch student data.');
@@ -70,23 +87,16 @@ export default function NoShowMonitor() {
         }
     }
 
-    function formatDate(iso) {
-        if (!iso) return '—';
-        return new Date(iso).toLocaleString('en-IN', {
-            day: '2-digit', month: 'short', year: 'numeric',
-            hour: '2-digit', minute: '2-digit',
-        });
-    }
+    const criticalCount = students.filter((s) => s.no_show_count >= 3).length;
+    const warningCount = students.filter((s) => s.no_show_count >= 2 && s.no_show_count < 3).length;
 
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
-                    <h2 className="text-xl font-bold text-text">No-Show Monitor</h2>
-                    <p className="text-sm text-text-secondary mt-0.5">
-                        Students with missed meals — sorted by count
-                    </p>
+                    <h2 className="page-title">No-Show Monitor</h2>
+                    <p className="page-subtitle">Students with missed meals — sorted by no-show count</p>
                 </div>
                 <button
                     onClick={handleRunCheck}
@@ -104,8 +114,30 @@ export default function NoShowMonitor() {
                 </button>
             </div>
 
+            {/* Summary chips */}
+            {!loading && students.length > 0 && (
+                <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-border">
+                        <span className="text-sm font-semibold text-text">{students.length}</span>
+                        <span className="text-xs text-text-muted">students flagged</span>
+                    </div>
+                    {criticalCount > 0 && (
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-danger/5 border border-danger/20">
+                            <span className="text-danger text-sm font-semibold">{criticalCount}</span>
+                            <span className="text-xs text-danger/80">critical (3+)</span>
+                        </div>
+                    )}
+                    {warningCount > 0 && (
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-warning/5 border border-warning/20">
+                            <span className="text-warning text-sm font-semibold">{warningCount}</span>
+                            <span className="text-xs text-warning/80">warning (2)</span>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Info strip */}
-            <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+            <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200">
                 <span className="text-lg flex-shrink-0">ℹ️</span>
                 <p className="text-xs text-amber-800 leading-relaxed">
                     The check marks unscanned bookings as <strong>no_show</strong> after each meal window closes
@@ -114,7 +146,7 @@ export default function NoShowMonitor() {
                 </p>
             </div>
 
-            {/* Table */}
+            {/* Main table / empty state */}
             <Card>
                 {loading ? (
                     <div className="space-y-3">
@@ -123,36 +155,53 @@ export default function NoShowMonitor() {
                         ))}
                     </div>
                 ) : students.length === 0 ? (
-                    <div className="text-center py-12">
-                        <div className="text-5xl mb-3">✅</div>
-                        <h3 className="text-base font-semibold text-text">All Clear</h3>
-                        <p className="text-sm text-text-secondary mt-1">
-                            No students with any no-shows recorded
-                        </p>
+                    /* ── Big green "all clear" card ── */
+                    <div className="flex flex-col items-center justify-center py-14 gap-5">
+                        <div className="w-24 h-24 rounded-full bg-success/10 flex items-center justify-center shadow-inner">
+                            <span className="text-5xl">✅</span>
+                        </div>
+                        <div className="text-center">
+                            <h3 className="text-xl font-extrabold text-success">No No-Shows Recorded</h3>
+                            <p className="text-sm text-text-secondary mt-1.5">
+                                All scanned students attended their booked meals.
+                            </p>
+                            {lastChecked && (
+                                <p className="text-xs text-text-muted mt-2">
+                                    Last data fetch: {lastChecked.toLocaleString('en-IN', {
+                                        day: '2-digit', month: 'short',
+                                        hour: '2-digit', minute: '2-digit',
+                                    })}
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            onClick={handleRunCheck}
+                            disabled={running}
+                            className="btn btn-outline btn-sm"
+                        >
+                            {running ? 'Running…' : '▶ Run No-Show Check'}
+                        </button>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
                                 <tr className="border-b border-border">
-                                    <th className="text-left text-xs font-semibold text-text-muted uppercase tracking-wider py-3 px-4">
-                                        Student
-                                    </th>
-                                    <th className="text-left text-xs font-semibold text-text-muted uppercase tracking-wider py-3 px-4">
-                                        Email
-                                    </th>
-                                    <th className="text-center text-xs font-semibold text-text-muted uppercase tracking-wider py-3 px-4">
-                                        No-Shows
-                                    </th>
-                                    <th className="text-left text-xs font-semibold text-text-muted uppercase tracking-wider py-3 px-4">
-                                        Last Missed Meal
-                                    </th>
-                                    <th className="text-center text-xs font-semibold text-text-muted uppercase tracking-wider py-3 px-4">
-                                        Auto-Booking
-                                    </th>
-                                    <th className="text-right text-xs font-semibold text-text-muted uppercase tracking-wider py-3 px-4">
-                                        Action
-                                    </th>
+                                    {[
+                                        { label: 'Student', align: 'left' },
+                                        { label: 'No-Shows', align: 'center' },
+                                        { label: 'Warning Level', align: 'center' },
+                                        { label: 'Last Missed', align: 'left' },
+                                        { label: 'Auto-Booking', align: 'center' },
+                                        { label: 'Action', align: 'right' },
+                                    ].map(({ label, align }) => (
+                                        <th
+                                            key={label}
+                                            className={`text-${align} text-xs font-semibold text-text-muted uppercase tracking-wider py-3 px-4`}
+                                        >
+                                            {label}
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
@@ -160,43 +209,43 @@ export default function NoShowMonitor() {
                                     const isDisabled = !student.default_booking_enabled;
                                     const isDanger = student.no_show_count >= 3;
                                     const isWarning = student.no_show_count === 2;
+                                    const warning = getWarningLevel(student.no_show_count);
 
                                     return (
                                         <tr
                                             key={student.id}
-                                            className={`border-b border-border last:border-0 ${isDanger ? 'bg-danger/5' :
-                                                    isWarning ? 'bg-warning/5' : ''
+                                            className={`border-b border-border last:border-0 transition-colors ${isDanger ? 'bg-danger/5 hover:bg-danger/8'
+                                                    : isWarning ? 'bg-warning/5 hover:bg-warning/8'
+                                                        : 'hover:bg-surface-hover'
                                                 }`}
                                         >
-                                            <td className="py-3 px-4">
-                                                <p className="text-sm font-medium text-text">{student.name}</p>
+                                            <td className="py-3.5 px-4">
+                                                <p className="text-sm font-semibold text-text">{student.name}</p>
+                                                <p className="text-xs text-text-muted">{student.email}</p>
                                             </td>
-                                            <td className="py-3 px-4">
-                                                <p className="text-sm text-text-secondary">{student.email}</p>
-                                            </td>
-                                            <td className="py-3 px-4 text-center">
-                                                <span
-                                                    className={`badge ${isDanger ? 'badge-danger' :
-                                                            isWarning ? 'badge-warning' :
-                                                                'badge-info'
-                                                        }`}
-                                                >
+                                            <td className="py-3.5 px-4 text-center">
+                                                <span className={`badge text-sm font-bold px-3 ${warning.badge}`}>
                                                     {student.no_show_count}
                                                 </span>
                                             </td>
-                                            <td className="py-3 px-4">
+                                            <td className="py-3.5 px-4 text-center">
+                                                <span className={`badge text-xs ${warning.badge}`}>
+                                                    {warning.icon} {warning.label}
+                                                </span>
+                                            </td>
+                                            <td className="py-3.5 px-4">
                                                 <p className="text-sm text-text-secondary">
                                                     {formatDate(student.last_no_show_date)}
                                                 </p>
                                             </td>
-                                            <td className="py-3 px-4 text-center">
+                                            <td className="py-3.5 px-4 text-center">
                                                 {isDisabled ? (
                                                     <span className="badge badge-danger">Disabled</span>
                                                 ) : (
                                                     <span className="badge badge-success">Active</span>
                                                 )}
                                             </td>
-                                            <td className="py-3 px-4 text-right">
+                                            <td className="py-3.5 px-4 text-right">
                                                 {isDanger && (
                                                     <button
                                                         onClick={() => setResetModal({ id: student.id, name: student.name })}

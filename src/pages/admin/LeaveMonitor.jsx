@@ -6,7 +6,6 @@ import { getToday } from '../../utils/dateHelpers';
 
 const MEAL_ORDER = { breakfast: 0, lunch: 1, dinner: 2 };
 
-// Check if a given meal on a given date falls within a leave
 function isMealOnLeave(leave, date, mealType) {
     if (date < leave.from_date || date > leave.to_date) return false;
     const mealIdx = MEAL_ORDER[mealType];
@@ -19,6 +18,31 @@ function isMealOnLeave(leave, date, mealType) {
     if (leave.from_date === date) return mealIdx >= fromIdx;
     if (leave.to_date === date) return mealIdx <= toIdx;
     return true;
+}
+
+function SummaryCard({ icon, label, count, loading, accentClass, bg }) {
+    return (
+        <div className={`card flex items-center gap-4 ${bg}`}>
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-white/70 shadow-sm">
+                {icon}
+            </div>
+            <div className="min-w-0">
+                {loading ? (
+                    <>
+                        <div className="skeleton h-7 w-10 mb-1" />
+                        <div className="skeleton h-4 w-28" />
+                    </>
+                ) : (
+                    <>
+                        <p className={`text-2xl font-extrabold ${accentClass}`} style={{ letterSpacing: '-0.02em' }}>
+                            {count}
+                        </p>
+                        <p className="text-xs text-text-muted font-medium mt-0.5">{label}</p>
+                    </>
+                )}
+            </div>
+        </div>
+    );
 }
 
 export default function LeaveMonitor() {
@@ -43,67 +67,87 @@ export default function LeaveMonitor() {
         fetchLeaves();
     }, [fetchLeaves]);
 
-    // Count students on leave per meal for the selected date
     const breakfastCount = leaves.filter((l) => isMealOnLeave(l, filterDate, 'breakfast')).length;
     const lunchCount = leaves.filter((l) => isMealOnLeave(l, filterDate, 'lunch')).length;
     const dinnerCount = leaves.filter((l) => isMealOnLeave(l, filterDate, 'dinner')).length;
+    const totalCount = leaves.length;
+    const isToday = filterDate === today;
 
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-bold text-text">Leave Monitor</h2>
-                    <p className="text-sm text-text-secondary mt-0.5">
-                        Students on approved leave — filter by date
+                    <h2 className="page-title">Leave Monitor</h2>
+                    <p className="page-subtitle">
+                        Students on approved leave —{' '}
+                        {isToday ? 'showing today' : `filtered to ${formatDate(filterDate)}`}
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <label className="text-sm text-text-secondary font-medium">Date:</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                    {isToday && (
+                        <span className="badge badge-success text-xs">Today</span>
+                    )}
+                    <label className="text-sm text-text-secondary font-medium sr-only">Date</label>
                     <input
                         type="date"
                         value={filterDate}
                         onChange={(e) => setFilterDate(e.target.value)}
-                        className="input text-sm py-1.5"
+                        className="input text-sm py-1.5 w-auto"
                     />
-                    {filterDate !== today && (
+                    {!isToday && (
                         <button
                             onClick={() => setFilterDate(today)}
                             className="btn btn-ghost btn-sm text-xs"
                         >
-                            Today
+                            ↩ Today
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* Per-meal summary stats */}
-            <div className="grid grid-cols-3 gap-4">
-                {[
-                    { label: 'Breakfast', icon: '☀️', count: breakfastCount, badgeClass: 'badge-warning' },
-                    { label: 'Lunch', icon: '🍽️', count: lunchCount, badgeClass: 'badge-info' },
-                    { label: 'Dinner', icon: '🌙', count: dinnerCount, badgeClass: 'badge-info' },
-                ].map((stat) => (
-                    <div key={stat.label} className="card">
-                        <div className="flex items-center gap-3">
-                            <span className="text-2xl">{stat.icon}</span>
-                            <div>
-                                <p className="text-2xl font-bold text-text">
-                                    {loading ? '—' : stat.count}
-                                </p>
-                                <p className="text-xs text-text-secondary">{stat.label} on Leave</p>
-                            </div>
-                        </div>
-                    </div>
-                ))}
+            {/* Summary stat cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <SummaryCard
+                    icon="🧑‍🎓"
+                    label="Total on Leave"
+                    count={totalCount}
+                    loading={loading}
+                    accentClass="text-text"
+                    bg=""
+                />
+                <SummaryCard
+                    icon="☀️"
+                    label="Breakfast Excluded"
+                    count={breakfastCount}
+                    loading={loading}
+                    accentClass="text-warning"
+                    bg="!border-warning/20"
+                />
+                <SummaryCard
+                    icon="🍽️"
+                    label="Lunch Excluded"
+                    count={lunchCount}
+                    loading={loading}
+                    accentClass="text-primary"
+                    bg="!border-primary/20"
+                />
+                <SummaryCard
+                    icon="🌙"
+                    label="Dinner Excluded"
+                    count={dinnerCount}
+                    loading={loading}
+                    accentClass="text-purple-600"
+                    bg="!border-purple-200"
+                />
             </div>
 
-            {/* Leave Table */}
+            {/* Leave table or empty state */}
             <Card
-                title={`Active Leaves on ${formatDate(filterDate)}`}
+                title={`Active Leaves — ${formatDate(filterDate)}`}
                 icon="🏖️"
-                badge={loading ? '…' : `${leaves.length} student${leaves.length !== 1 ? 's' : ''}`}
-                badgeType={leaves.length > 0 ? 'badge-warning' : 'badge-muted'}
+                badge={loading ? '…' : totalCount > 0 ? `${totalCount} student${totalCount !== 1 ? 's' : ''}` : undefined}
+                badgeType="badge-warning"
             >
                 {loading ? (
                     <div className="space-y-3">
@@ -111,11 +155,27 @@ export default function LeaveMonitor() {
                             <div key={i} className="skeleton h-14 w-full" />
                         ))}
                     </div>
-                ) : leaves.length === 0 ? (
-                    <div className="text-center py-10">
-                        <div className="text-4xl mb-3">✅</div>
-                        <p className="text-sm font-medium text-text">No leaves on this date</p>
-                        <p className="text-xs text-text-muted mt-1">All students are available for meals.</p>
+                ) : totalCount === 0 ? (
+                    /* ── Green "all clear" empty state ── */
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                        <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center text-4xl shadow-inner">
+                            ✅
+                        </div>
+                        <div className="text-center">
+                            <h3 className="text-lg font-bold text-success">All Students Available</h3>
+                            <p className="text-sm text-text-secondary mt-1">
+                                No approved leaves on{' '}
+                                <span className="font-semibold">{formatDate(filterDate)}</span>.
+                            </p>
+                            <p className="text-xs text-text-muted mt-1">
+                                All students are expected to attend their meals as booked.
+                            </p>
+                        </div>
+                        {!isToday && (
+                            <button onClick={() => setFilterDate(today)} className="btn btn-ghost btn-sm text-xs mt-1">
+                                View today instead
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -124,24 +184,22 @@ export default function LeaveMonitor() {
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="border-b border-border">
-                                        <th className="text-left py-2 px-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Student</th>
-                                        <th className="text-left py-2 px-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Leave From</th>
-                                        <th className="text-left py-2 px-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Leave To</th>
-                                        <th className="text-left py-2 px-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Meals Affected</th>
-                                        <th className="text-left py-2 px-3 text-xs font-semibold text-text-muted uppercase tracking-wide">Status</th>
+                                        {['Student', 'Leave From', 'Leave To', 'Meals Affected', 'Status'].map((h) => (
+                                            <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
+                                                {h}
+                                            </th>
+                                        ))}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {leaves.map((leave) => {
-                                        const meals = ['breakfast', 'lunch', 'dinner']
-                                            .filter((m) => isMealOnLeave(leave, filterDate, m));
-
+                                        const meals = ['breakfast', 'lunch', 'dinner'].filter((m) => isMealOnLeave(leave, filterDate, m));
                                         const isPast = leave.to_date < today;
 
                                         return (
                                             <tr key={leave.id} className="hover:bg-surface-hover transition-colors">
                                                 <td className="py-3 px-3">
-                                                    <p className="font-medium text-text">{leave.users?.name || '—'}</p>
+                                                    <p className="font-semibold text-text">{leave.users?.name || '—'}</p>
                                                     <p className="text-xs text-text-muted">{leave.users?.email}</p>
                                                 </td>
                                                 <td className="py-3 px-3 text-text-secondary">
@@ -153,13 +211,15 @@ export default function LeaveMonitor() {
                                                     <span className="ml-1 text-xs text-text-muted capitalize">({leave.to_meal})</span>
                                                 </td>
                                                 <td className="py-3 px-3">
-                                                    <div className="flex gap-1 flex-wrap">
-                                                        {meals.length === 0 ? (
-                                                            <span className="text-text-muted text-xs">None</span>
-                                                        ) : meals.map((m) => (
-                                                            <span key={m} className="badge badge-info text-xs capitalize">{m}</span>
-                                                        ))}
-                                                    </div>
+                                                    {meals.length === 0 ? (
+                                                        <span className="text-text-muted text-xs">None</span>
+                                                    ) : (
+                                                        <div className="flex gap-1 flex-wrap">
+                                                            {meals.map((m) => (
+                                                                <span key={m} className="badge badge-info text-xs capitalize">{m}</span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="py-3 px-3">
                                                     <span className={`badge text-xs ${isPast ? 'badge-muted' : 'badge-success'}`}>
@@ -176,26 +236,25 @@ export default function LeaveMonitor() {
                         {/* Mobile cards */}
                         <div className="md:hidden space-y-3">
                             {leaves.map((leave) => {
-                                const meals = ['breakfast', 'lunch', 'dinner']
-                                    .filter((m) => isMealOnLeave(leave, filterDate, m));
+                                const meals = ['breakfast', 'lunch', 'dinner'].filter((m) => isMealOnLeave(leave, filterDate, m));
                                 const isPast = leave.to_date < today;
 
                                 return (
-                                    <div key={leave.id} className="p-3 rounded-lg border border-border bg-surface-hover">
+                                    <div key={leave.id} className="p-4 rounded-xl border border-border bg-surface-hover">
                                         <div className="flex items-start justify-between mb-2">
                                             <div>
-                                                <p className="font-medium text-text text-sm">{leave.users?.name || '—'}</p>
+                                                <p className="font-semibold text-text text-sm">{leave.users?.name || '—'}</p>
                                                 <p className="text-xs text-text-muted">{leave.users?.email}</p>
                                             </div>
                                             <span className={`badge text-xs ${isPast ? 'badge-muted' : 'badge-success'}`}>
                                                 {isPast ? 'Completed' : 'Active'}
                                             </span>
                                         </div>
-                                        <p className="text-xs text-text-secondary">
+                                        <p className="text-xs text-text-secondary mb-2">
                                             {formatDate(leave.from_date)} ({leave.from_meal}) → {formatDate(leave.to_date)} ({leave.to_meal})
                                         </p>
                                         {meals.length > 0 && (
-                                            <div className="flex gap-1 flex-wrap mt-2">
+                                            <div className="flex gap-1 flex-wrap">
                                                 {meals.map((m) => (
                                                     <span key={m} className="badge badge-info text-xs capitalize">{m}</span>
                                                 ))}
