@@ -20,7 +20,7 @@ export const bookingService = {
     async getBookingsByDate(date) {
         const { data, error } = await supabase
             .from('bookings')
-            .select('*, users(name, email)')
+            .select('*, users!bookings_user_id_fkey(name, email)')
             .eq('date', date)
             .neq('status', 'cancelled');
         if (error) throw error;
@@ -31,7 +31,7 @@ export const bookingService = {
     async getAllBookingsByDate(date) {
         const { data, error } = await supabase
             .from('bookings')
-            .select('*, users(name, email)')
+            .select('*, users!bookings_user_id_fkey(name, email)')
             .eq('date', date);
         if (error) throw error;
         return data || [];

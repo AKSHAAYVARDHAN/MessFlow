@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import Card from '../../components/Card';
 import { bookingService } from '../../services/bookingService';
 import { leaveService } from '../../services/leaveService';
@@ -6,7 +7,7 @@ import { announcementService } from '../../services/announcementService';
 import { menuService } from '../../services/menuService';
 import { useRealtimeBookings } from '../../hooks/useRealtime';
 import { LUNCH_SLOTS, DINNER_SLOTS } from '../../utils/constants';
-import { getToday } from '../../utils/dateHelpers';
+
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import {
     BarChart,
@@ -62,6 +63,7 @@ function SkeletonRows({ count = 3, height = 56 }) {
 
 /* ════════════════════════════════════════════════════════════════════ */
 export default function Overview() {
+    const { user } = useAuth();
     const [loading, setLoading] = useState(true);
 
     // Stat counts
@@ -75,11 +77,16 @@ export default function Overview() {
     const [todayMenus, setTodayMenus] = useState([]);
     const [recentAnnouncements, setRecentAnnouncements] = useState([]);
 
-    const today = getToday();
+    const today = new Date().toISOString().split('T')[0];
 
     async function fetchData() {
         try {
             setLoading(true);
+
+            // Debug: verify auth is ready before querying
+            console.log('Overview → user:', user);
+            console.log('Overview → today:', today);
+
             const [
                 bookingCount,
                 cancelCount,
@@ -98,6 +105,12 @@ export default function Overview() {
                 announcementService.getAnnouncements(5),
             ]);
 
+            // Debug: verify returned data
+            console.log('Today:', today);
+            console.log('MenuData:', menus);
+            console.log('Announcements:', announcements);
+            console.log('Overview → totalBookings:', bookingCount);
+
             setTotalBookings(bookingCount);
             setCancellations(cancelCount);
             setNoShows(noShowCount);
@@ -112,7 +125,10 @@ export default function Overview() {
         }
     }
 
-    useEffect(() => { fetchData(); }, [today]);
+    useEffect(() => {
+        if (!user) return;   // wait until Supabase session is hydrated
+        fetchData();
+    }, [user, today]);
     useRealtimeBookings(today, () => fetchData());
 
     // ── Derived stats ────────────────────────────────────────────────────
@@ -139,7 +155,7 @@ export default function Overview() {
     }));
 
     const menuMap = {};
-    todayMenus.forEach((m) => (menuMap[m.meal_type] = m));
+    todayMenus.forEach((m) => (menuMap[m.meal_type.toLowerCase()] = m));
 
     return (
         <div className="overview-root animate-fade-in">
