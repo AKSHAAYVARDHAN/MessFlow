@@ -53,10 +53,15 @@ export function secondsUntilCutoff(meal) {
 }
 
 /**
- * Formats seconds into a human-readable "Xm Ys" string.
+ * Formats seconds into a human-readable countdown string.
+ * Shows "Xh Ym Zs" when hours > 0, or "Ym Zs" when under an hour.
  */
 export function formatCountdown(totalSeconds) {
-    const minutes = Math.floor(totalSeconds / 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
+    if (hours > 0) {
+        return `${hours}h ${minutes}m ${String(seconds).padStart(2, '0')}s`;
+    }
     return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
 }
