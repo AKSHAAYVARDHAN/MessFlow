@@ -37,33 +37,46 @@ function isBookingOpen(mealType, tomorrowMode) {
 }
 
 // ─── Booking Countdown Timer ─────────────────────────────────────────────────
-// Shows live countdown to the booking cutoff for a meal (only while open).
 function BookingCountdown({ mealType, tomorrowMode }) {
     const [secs, setSecs] = useState(() => secondsUntilCutoff(mealType));
 
     useEffect(() => {
-        const timer = setInterval(() => {
-            setSecs(secondsUntilCutoff(mealType));
-        }, 1000);
+        const timer = setInterval(() => setSecs(secondsUntilCutoff(mealType)), 1000);
         return () => clearInterval(timer);
     }, [mealType]);
 
-    // Hide if booking is closed or in tomorrow mode (no cutoff concept)
     if (tomorrowMode || secs <= 0) return null;
 
-    const isUrgent = secs < 900;   // < 15 min
-    const isCritical = secs < 300; // < 5 min
+    const isUrgent   = secs < 900;
+    const isCritical = secs < 300;
+    // Max window: 3h = 10800s; cap progress at 100%
+    const totalWindow = mealType === 'breakfast' ? 5400 : mealType === 'lunch' ? 9000 : 10800;
+    const pct = Math.min(100, Math.round((secs / totalWindow) * 100));
+
+    const bg      = isCritical ? '#FEE2E2' : isUrgent ? '#FEF3C7' : '#EFF6FF';
+    const color   = isCritical ? '#B91C1C' : isUrgent ? '#92400E' : '#1E40AF';
+    const border  = isCritical ? '#FECACA' : isUrgent ? '#FCD34D' : '#BFDBFE';
+    const barColor = isCritical ? '#EF4444' : isUrgent ? '#F59E0B' : '#3B82F6';
 
     return (
-        <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg ${isCritical ? 'bg-danger/10 text-danger border border-danger/20' :
-            isUrgent ? 'bg-warning/10 text-warning border border-warning/20' :
-                'bg-surface-hover text-text-muted border border-border'
-            }`}>
-            <span>⏱</span>
-            <span className="font-medium">
-                {mealType.charAt(0).toUpperCase() + mealType.slice(1)} booking closes in{' '}
-                <strong>{formatCountdown(secs)}</strong>
-            </span>
+        <div style={{
+            background: bg, border: `1.5px solid ${border}`,
+            borderRadius: 10, padding: '8px 12px', width: '100%',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                <span style={{ fontSize: '0.8rem' }}>⏱</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color, flex: 1 }}>
+                    Closes in <strong style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}>{formatCountdown(secs)}</strong>
+                </span>
+            </div>
+            <div style={{ height: 4, borderRadius: 9999, background: 'rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+                <div style={{
+                    height: '100%', borderRadius: 9999,
+                    width: `${pct}%`,
+                    background: barColor,
+                    transition: 'width 1s linear',
+                }} />
+            </div>
         </div>
     );
 }
@@ -327,43 +340,69 @@ export default function TodayStatus() {
     const regularAnn = announcements.filter((a) => !a.is_important);
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-6 animate-fade-in">
+
             {/* ── TOP SECTION: Summary + Auto Booking ── */}
             <div className="flex flex-col sm:flex-row gap-4">
-                {/* Date summary card */}
-                <div className="card flex-1 flex items-center gap-4" style={{
-                    background: isTomorrow
-                        ? 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)'
-                        : 'linear-gradient(135deg, #EFF6FF 0%, #EEF2FF 100%)',
-                    borderColor: isTomorrow ? '#86EFAC' : '#BFDBFE',
-                }}>
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 ${isTomorrow ? 'bg-green-100' : 'bg-blue-100'}`}>
+                {/* Date + booking mode banner */}
+                <div
+                    className="card flex-1 flex items-center gap-4"
+                    style={{
+                        background: isTomorrow
+                            ? 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)'
+                            : 'linear-gradient(135deg, #EFF6FF 0%, #EEF2FF 100%)',
+                        borderColor: isTomorrow ? '#86EFAC' : '#BFDBFE',
+                        borderWidth: 1.5,
+                    }}
+                >
+                    <div style={{
+                        width: 52, height: 52, borderRadius: 16, flexShrink: 0,
+                        background: isTomorrow ? '#DCFCE7' : '#DBEAFE',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem',
+                    }}>
                         {isTomorrow ? '🌙' : '📅'}
                     </div>
-                    <div>
-                        <p className={`text-xs font-semibold uppercase tracking-wider mb-0.5 ${isTomorrow ? 'text-green-600' : 'text-blue-500'}`}>
-                            {isTomorrow ? 'Tomorrow' : 'Today'}
-                        </p>
-                        <p className="text-base font-bold text-text">
+                    <div style={{ flex: 1 }}>
+                        {/* Today / Tomorrow tab indicator */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                            <span style={{
+                                fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase',
+                                letterSpacing: '0.08em',
+                                color: isTomorrow ? '#15803D' : '#2563EB',
+                                background: isTomorrow ? '#DCFCE7' : '#DBEAFE',
+                                border: `1px solid ${isTomorrow ? '#86EFAC' : '#93C5FD'}`,
+                                borderRadius: 6, padding: '2px 8px',
+                            }}>
+                                {isTomorrow ? '🌙 Tomorrow' : '📅 Today'}
+                            </span>
+                            <span style={{
+                                fontSize: '0.7rem', fontWeight: 600,
+                                color: isTomorrow ? '#15803D' : '#2563EB',
+                            }}>
+                                {isTomorrow ? 'Booking open for tomorrow' : 'Booking open now'}
+                            </span>
+                        </div>
+                        <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.01em' }}>
                             {format(new Date(bookingDate + 'T12:00:00'), 'EEEE, MMMM d, yyyy')}
                         </p>
-                        <p className="text-sm text-text-secondary mt-0.5">
+                        <p style={{ fontSize: '0.8125rem', color: '#64748B', marginTop: 2 }}>
                             {bookings.filter(b => b.status !== 'cancelled').length} of 3 meals booked
                         </p>
                     </div>
                 </div>
 
                 {/* Auto Booking Toggle */}
-                <div className="card flex flex-col gap-3 sm:w-auto"
-                    style={{ minWidth: '220px' }}>
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
-                            🔄
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-semibold text-text">Auto Booking</p>
-                            <p className="text-xs text-text-muted mt-0.5">
-                                {profile?.default_booking_enabled ? 'Active — meals booked automatically' : 'Off — book meals manually'}
+                <div className="card flex flex-col gap-3" style={{ minWidth: '220px' }}>
+                    <div className="flex items-center gap-3">
+                        <div style={{
+                            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                            background: 'rgba(37,99,235,0.08)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem',
+                        }}>🔄</div>
+                        <div style={{ flex: 1 }}>
+                            <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A' }}>Auto Booking</p>
+                            <p style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: 2 }}>
+                                {profile?.default_booking_enabled ? 'Active — auto-booked nightly' : 'Off — book manually'}
                             </p>
                         </div>
                         <button
@@ -377,21 +416,27 @@ export default function TodayStatus() {
                             title={!profile?.default_booking_enabled ? 'Disabled by admin due to no-shows' : ''}
                         />
                     </div>
-                    {/* No-show warning inside the card */}
                     {profile && !profile.default_booking_enabled && (
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-danger/8 border border-danger/20">
-                            <span className="text-base flex-shrink-0">⚠️</span>
-                            <p className="text-xs font-medium text-danger leading-snug">
-                                Auto-booking disabled due to {profile.no_show_count || 3}+ no-shows.
-                                Contact admin to re-enable.
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '8px 12px', borderRadius: 10,
+                            background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)',
+                        }}>
+                            <span style={{ fontSize: '0.875rem', flexShrink: 0 }}>⚠️</span>
+                            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#DC2626', lineHeight: 1.4 }}>
+                                Disabled — {profile.no_show_count || 3}+ no-shows. Contact admin.
                             </p>
                         </div>
                     )}
                     {profile && profile.default_booking_enabled && (profile.no_show_count || 0) >= 2 && (
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-warning/10 border border-warning/20">
-                            <span className="text-base flex-shrink-0">⚠️</span>
-                            <p className="text-xs font-medium text-warning leading-snug">
-                                {profile.no_show_count} no-show{profile.no_show_count !== 1 ? 's' : ''}. One more disables auto-booking.
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '8px 12px', borderRadius: 10,
+                            background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)',
+                        }}>
+                            <span style={{ fontSize: '0.875rem', flexShrink: 0 }}>⚠️</span>
+                            <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D97706', lineHeight: 1.4 }}>
+                                {profile.no_show_count} no-show{profile.no_show_count !== 1 ? 's' : ''}. 1 more disables auto-booking.
                             </p>
                         </div>
                     )}
@@ -400,39 +445,40 @@ export default function TodayStatus() {
 
             {/* Active Leave Banner */}
             {!leaveLoading && activeLeave && (
-                <div className="flex items-start gap-4 p-4 rounded-2xl"
-                    style={{ background: 'linear-gradient(135deg, #EFF6FF, #EEF2FF)', border: '1.5px solid #BFDBFE' }}>
-                    <span className="text-2xl flex-shrink-0 mt-0.5">🏖️</span>
+                <div style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 14,
+                    padding: '14px 18px', borderRadius: 16,
+                    background: 'linear-gradient(135deg, #EFF6FF, #EEF2FF)',
+                    border: '1.5px solid #BFDBFE',
+                }}>
+                    <span style={{ fontSize: '1.5rem', flexShrink: 0, marginTop: 2 }}>🏖️</span>
                     <div>
-                        <p className="text-sm font-bold text-primary">You are currently on leave</p>
-                        <p className="text-sm text-text-secondary mt-0.5">
-                            From <strong className="text-text">{formatDate(activeLeave.from_date)}</strong> ({activeLeave.from_meal}) to{' '}
-                            <strong className="text-text">{formatDate(activeLeave.to_date)}</strong> ({activeLeave.to_meal}).
+                        <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1E40AF' }}>You are currently on leave</p>
+                        <p style={{ fontSize: '0.8125rem', color: '#475569', marginTop: 3 }}>
+                            From <strong style={{ color: '#0F172A' }}>{formatDate(activeLeave.from_date)}</strong> ({activeLeave.from_meal}) to{' '}
+                            <strong style={{ color: '#0F172A' }}>{formatDate(activeLeave.to_date)}</strong> ({activeLeave.to_meal}).
                             Booking is disabled for affected meals.
                         </p>
                     </div>
                 </div>
             )}
 
-            {/* ── BOOKING STATUS BANNER ── */}
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${isTomorrow
-                ? 'bg-green-50 border-green-200'
-                : 'bg-blue-50 border-blue-200'
-                }`}>
-                <span className="text-xl flex-shrink-0">{isTomorrow ? '🌙' : '✅'}</span>
-                <p className={`text-sm font-semibold ${isTomorrow ? 'text-green-700' : 'text-blue-700'
-                    }`}>
-                    {isTomorrow
-                        ? "Booking open for tomorrow's meals"
-                        : "Booking open for today's meals"}
-                </p>
-            </div>
-
-            {/* ── SECOND SECTION: Meal Cards ── */}
+            {/* ── MEAL CARDS SECTION ── */}
             <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="section-title">{isTomorrow ? "Tomorrow's Meals" : "Today's Meals"}</h3>
-                    <span className="text-sm text-text-muted">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <h3 className="section-title">{isTomorrow ? "Tomorrow's Meals" : "Today's Meals"}</h3>
+                        <span style={{
+                            fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+                            padding: '3px 9px', borderRadius: 6,
+                            background: isTomorrow ? '#DCFCE7' : '#DBEAFE',
+                            color: isTomorrow ? '#15803D' : '#1E40AF',
+                            border: `1px solid ${isTomorrow ? '#86EFAC' : '#93C5FD'}`,
+                        }}>
+                            {isTomorrow ? 'Tomorrow' : 'Today'}
+                        </span>
+                    </div>
+                    <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>
                         {bookings.filter(b => b.status === 'booked').length} booked
                     </span>
                 </div>
